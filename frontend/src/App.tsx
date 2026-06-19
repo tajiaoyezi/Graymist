@@ -2,6 +2,8 @@ import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { CreateModelPage } from "./pages/CreateModelPage";
+import { DeploymentConsolePage } from "./pages/DeploymentConsolePage";
+import { EndpointFormPage } from "./pages/EndpointFormPage";
 import { ModelDetailPage } from "./pages/ModelDetailPage";
 import { ModelsPage } from "./pages/ModelsPage";
 import { VersionDetailPage } from "./pages/VersionDetailPage";
@@ -15,6 +17,7 @@ export default function App() {
         <nav className="flex gap-4 text-blue-600">
           <Link to="/models">{t("nav.models")}</Link>
           <Link to="/models/new">{t("nav.create")}</Link>
+          <Link to="/endpoints">{t("nav.deployments")}</Link>
         </nav>
       </header>
       <Routes>
@@ -23,6 +26,8 @@ export default function App() {
         <Route path="/models/new" element={<CreateModelPage />} />
         <Route path="/models/:modelId" element={<ModelDetailPage />} />
         <Route path="/versions/:versionId" element={<VersionDetailPage />} />
+        <Route path="/endpoints" element={<DeploymentConsolePage />} />
+        <Route path="/endpoints/new" element={<EndpointFormPage />} />
       </Routes>
     </div>
   );

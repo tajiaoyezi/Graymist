@@ -1,3 +1,4 @@
+import type { EndpointStatus } from "./domain/endpointStateMachine";
 import type { VersionStatus } from "./domain/stateMachine";
 
 export type TaskType = "classification" | "generation" | "embedding" | "custom";
@@ -32,4 +33,34 @@ export interface Version {
   metrics: VersionMetrics | null;
   created_at: string;
   deployable: boolean;
+}
+
+export interface ResourceQuota {
+  cpu: number;
+  memory: number;
+  gpu: number;
+}
+
+export interface EndpointBinding {
+  model_version_id: string;
+  weight: number;
+}
+
+export interface Endpoint {
+  id: string;
+  name: string;
+  url_path: string;
+  status: EndpointStatus;
+  replicas: number;
+  resource_quota: ResourceQuota;
+  timeout_ms: number;
+  max_concurrency: number;
+  bindings: EndpointBinding[];
+  created_at: string;
+}
+
+export interface QuotaInfo {
+  total: ResourceQuota;
+  used: ResourceQuota;
+  remaining: ResourceQuota;
 }

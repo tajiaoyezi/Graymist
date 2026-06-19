@@ -1,4 +1,11 @@
-import type { Model, Version, VersionMetrics } from "../types";
+import type {
+  Endpoint,
+  EndpointBinding,
+  Model,
+  QuotaInfo,
+  Version,
+  VersionMetrics,
+} from "../types";
 
 // 默认 /api：开发期 Vite 代理转发到后端、生产期由反代挂载，避免与 SPA 路由前缀冲突。
 const BASE = (import.meta.env?.VITE_API_BASE as string | undefined) ?? "/api";
@@ -71,6 +78,27 @@ export const api = {
     req<{ version: string; version_id: string; metrics: VersionMetrics | null }[]>(
       `/models/${modelId}/versions/compare`,
     ),
+  // a2 端点（无 delete —— 下线走停止）
+  listEndpoints: () => req<Endpoint[]>("/endpoints"),
+  createEndpoint: (body: {
+    name: string;
+    url_path: string;
+    replicas: number;
+    resource_quota: { cpu: number; memory: number; gpu: number };
+    timeout_ms: number;
+    max_concurrency: number;
+    bindings: EndpointBinding[];
+  }) => req<Endpoint>("/endpoints", { method: "POST", body: JSON.stringify(body) }),
+  getEndpoint: (id: string) => req<Endpoint>(`/endpoints/${id}`),
+  updateEndpoint: (id: string, body: Partial<Endpoint> & { bindings?: EndpointBinding[] }) =>
+    req<Endpoint>(`/endpoints/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  startEndpoint: (id: string) =>
+    req<Endpoint>(`/endpoints/${id}/start`, { method: "POST" }),
+  stopEndpoint: (id: string) =>
+    req<Endpoint>(`/endpoints/${id}/stop`, { method: "POST" }),
+  restartEndpoint: (id: string) =>
+    req<Endpoint>(`/endpoints/${id}/restart`, { method: "POST" }),
+  getQuota: () => req<QuotaInfo>("/quota"),
 };
 
 export type Api = typeof api;
