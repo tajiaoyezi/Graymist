@@ -1,0 +1,38 @@
+[project]
+name = "graymist-backend"
+version = "0.1.0"
+description = "Graymist AI 平台 — 后端(a1-model-registry：模型注册与版本管理)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "jsonschema>=4.21",
+    "redis>=5.0",
+    # 生产环境数据库驱动（PostgreSQL）。测试用 aiosqlite，见 [dev]。
+    "asyncpg>=0.29; platform_python_implementation == 'CPython'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "aiosqlite>=0.20",
+    "fakeredis>=2.23",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]

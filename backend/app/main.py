@@ -1,0 +1,71 @@
+"""FastAPI 应用工厂。
+
+异常映射：NotFoundError→404、InvalidSchemaError→422、InvalidTransitionError→409。
+引擎惰性创建，故 create_app() 在导入期不连接数据库。
+"""
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from app.common.errors import NotFoundError
+from app.common.health import redis_ping
+from app.common.schema_validation import InvalidSchemaError
+from app.config import settings
+from app.domain.state_machine import InvalidTransitionError
+from app.models.router import router as models_router
+from app.versions.router import router as versions_router
+
+
+@asynccontextmanager
+async def _lifespan(_app: "FastAPI"):
+    # 仅当 auto_create_tables（本地/E2E）时建表；生产走 Alembic。
+    if settings.auto_create_tables:
+        from app.db import tables  # noqa: F401  注册 ORM
+        from app.db.base import Base
+        from app.db.session import get_engine
+
+        async with get_engine().begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    yield
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Graymist 模型注册与版本管理", version="0.1.0", lifespan=_lifespan
+    )
+
+    @app.middleware("http")
+    async def _limit_body_size(request: Request, call_next):
+        # 审查 M2：超大请求体早拦，避免进入解析/校验拖垮 worker。
+        cl = request.headers.get("content-length")
+        if cl is not None and cl.isdigit() and int(cl) > settings.max_request_bytes:
+            return JSONResponse(status_code=413, content={"detail": "请求体过大"})
+        return await call_next(request)
+
+    @app.exception_handler(RecursionError)
+    async def _too_nested(request: Request, exc: RecursionError):
+        return JSONResponse(status_code=400, content={"detail": "请求结构过于嵌套"})
+
+    @app.exception_handler(NotFoundError)
+    async def _not_found(request: Request, exc: NotFoundError):
+        return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+    @app.exception_handler(InvalidSchemaError)
+    async def _bad_schema(request: Request, exc: InvalidSchemaError):
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(InvalidTransitionError)
+    async def _bad_transition(request: Request, exc: InvalidTransitionError):
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.get("/health", tags=["health"])
+    async def health():
+        return {"status": "ok", "redis": await redis_ping(settings.redis_url)}
+
+    app.include_router(models_router)
+    app.include_router(versions_router)
+    return app
+
+
+app = create_app()
