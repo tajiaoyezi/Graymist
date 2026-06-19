@@ -1,0 +1,17 @@
+# IDE / 编辑器
+.idea/
+
+# Claude Code 运行时产物
+.claude/scheduled_tasks.lock
+
+# Python（后端）
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Node（前端）
+node_modules/
+dist/
+.vite/
