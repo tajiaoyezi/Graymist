@@ -39,3 +39,9 @@ async def get_session() -> AsyncIterator[AsyncSession]:
         except Exception:
             await session.rollback()
             raise
+
+
+def get_bg_sessionmaker() -> async_sessionmaker[AsyncSession]:
+    """FastAPI 依赖：供异步后台任务开自己的独立会话（a2 异步部署执行器，H3）。
+    测试可覆盖此依赖为测试会话工厂，使后台写回落到测试库。"""
+    return get_sessionmaker()

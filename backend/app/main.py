@@ -7,12 +7,15 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
-from app.common.errors import NotFoundError
+from app.common.errors import BindingError, ConflictError, NotFoundError
 from app.common.health import redis_ping
+from app.common.quota import QuotaExceededError
 from app.common.schema_validation import InvalidSchemaError
 from app.config import settings
 from app.domain.state_machine import InvalidTransitionError
+from app.endpoints.router import router as endpoints_router
 from app.models.router import router as models_router
 from app.versions.router import router as versions_router
 
@@ -59,12 +62,30 @@ def create_app() -> FastAPI:
     async def _bad_transition(request: Request, exc: InvalidTransitionError):
         return JSONResponse(status_code=409, content={"detail": str(exc)})
 
+    @app.exception_handler(ConflictError)
+    async def _conflict(request: Request, exc: ConflictError):
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(QuotaExceededError)
+    async def _quota_exceeded(request: Request, exc: QuotaExceededError):
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+    @app.exception_handler(BindingError)
+    async def _bad_binding(request: Request, exc: BindingError):
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(IntegrityError)
+    async def _integrity(request: Request, exc: IntegrityError):
+        # 审查 L1:SELECT-查重→INSERT 的并发竞态下唯一约束冲突的兜底,统一 409。
+        return JSONResponse(status_code=409, content={"detail": "资源冲突(唯一约束)"})
+
     @app.get("/health", tags=["health"])
     async def health():
         return {"status": "ok", "redis": await redis_ping(settings.redis_url)}
 
     app.include_router(models_router)
     app.include_router(versions_router)
+    app.include_router(endpoints_router)
     return app
 
 

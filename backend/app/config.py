@@ -15,5 +15,13 @@ class Settings(BaseSettings):
     # 请求体大小上限（字节），超出返回 413（审查 M2 DoS 防护）。
     max_request_bytes: int = 1024 * 1024
 
+    # a2 平台总配额（资源预算累计校验，可配置）。CPU 核 / 内存 MB / GPU 卡。
+    total_cpu: float = 32
+    total_memory: float = 65536
+    total_gpu: float = 8
+    # a2 异步部署模拟耗时区间（秒）。测试/E2E 设 0 使其确定收敛。
+    deploy_delay_min_seconds: float = 3.0
+    deploy_delay_max_seconds: float = 10.0
+
 
 settings = Settings()

@@ -26,3 +26,12 @@ class VersionStatus(str, Enum):
     validating = "validating"
     ready = "ready"
     archived = "archived"
+
+
+class EndpointStatus(str, Enum):
+    """端点状态(a2,第二个独立状态机,§3)。"""
+
+    creating = "creating"
+    running = "running"
+    stopped = "stopped"
+    failed = "failed"
