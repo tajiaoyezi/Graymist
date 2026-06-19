@@ -15,3 +15,9 @@ venv/
 node_modules/
 dist/
 .vite/
+
+# 测试 / E2E 产物
+*.db
+test-results/
+playwright-report/
+.last-run.json
