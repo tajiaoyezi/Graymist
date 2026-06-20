@@ -64,3 +64,24 @@ export interface QuotaInfo {
   used: ResourceQuota;
   remaining: ResourceQuota;
 }
+
+// a3 推理调用
+export interface InferResult {
+  result: unknown;
+  version_id: string;
+  latency_ms: number;
+}
+
+export interface AsyncSubmit {
+  task_id: string;
+  status: string;
+}
+
+export interface AsyncTask {
+  id: string;
+  endpoint_id: string;
+  status: string;
+  result: unknown | null;
+  created_at: string;
+  finished_at: string | null;
+}

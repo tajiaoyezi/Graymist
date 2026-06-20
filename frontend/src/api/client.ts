@@ -1,6 +1,9 @@
 import type {
+  AsyncSubmit,
+  AsyncTask,
   Endpoint,
   EndpointBinding,
+  InferResult,
   Model,
   QuotaInfo,
   Version,
@@ -99,6 +102,19 @@ export const api = {
   restartEndpoint: (id: string) =>
     req<Endpoint>(`/endpoints/${id}/restart`, { method: "POST" }),
   getQuota: () => req<QuotaInfo>("/quota"),
+  // a3 推理调用
+  infer: (endpointId: string, input: unknown) =>
+    req<InferResult>(`/endpoints/${endpointId}/infer`, {
+      method: "POST",
+      body: JSON.stringify({ input }),
+    }),
+  submitAsyncInference: (endpointId: string, input: unknown) =>
+    req<AsyncSubmit>(`/endpoints/${endpointId}/infer/async`, {
+      method: "POST",
+      body: JSON.stringify({ input }),
+    }),
+  getInferenceTask: (taskId: string) =>
+    req<AsyncTask>(`/inference/tasks/${taskId}`),
 };
 
 export type Api = typeof api;
