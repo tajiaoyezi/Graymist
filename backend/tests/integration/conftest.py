@@ -109,3 +109,66 @@ async def endpoint_client(session_factory, monkeypatch):
     # 清理未排空的协程,避免 "coroutine never awaited" 警告。
     for coro in collected:
         coro.close()
+
+
+class _InferHarness:
+    """推理测试夹具:客户端 + 部署排空器 drain + 异步推理排空器 drain_infer。"""
+
+    def __init__(self, client, drain, drain_infer):
+        self.client = client
+        self.drain = drain
+        self.drain_infer = drain_infer
+
+
+@pytest_asyncio.fixture
+async def infer_client(session_factory, monkeypatch):
+    """端点 + 推理用例:覆盖 deploy 与 inference 两个后台 spawn 接缝为收集器,
+    分别由 drain()(部署)/ drain_infer()(异步推理)在请求提交后确定性执行。"""
+    from app.db.session import get_bg_sessionmaker
+    from app.endpoints import deploy
+    from app.inference import concurrency, runner
+
+    # 部署与推理模拟耗时均设 0,使后台执行即时收敛。
+    monkeypatch.setattr(settings, "deploy_delay_min_seconds", 0)
+    monkeypatch.setattr(settings, "deploy_delay_max_seconds", 0)
+    monkeypatch.setattr(settings, "infer_latency_min_seconds", 0)
+    monkeypatch.setattr(settings, "infer_latency_max_seconds", 0)
+    concurrency.reset()  # 进程内并发注册表隔离
+
+    deploy_coros: list = []
+    infer_coros: list = []
+    monkeypatch.setattr(deploy, "_spawn_fn", lambda coro: deploy_coros.append(coro))
+    monkeypatch.setattr(runner, "_spawn_fn", lambda coro: infer_coros.append(coro))
+
+    app = create_app()
+
+    async def override_get_session():
+        async with session_factory() as s:
+            try:
+                yield s
+                await s.commit()
+            except Exception:
+                await s.rollback()
+                raise
+
+    app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_bg_sessionmaker] = lambda: session_factory
+
+    async def drain(n=None):
+        count = 0
+        while deploy_coros and (n is None or count < n):
+            await deploy_coros.pop(0)
+            count += 1
+
+    async def drain_infer(n=None):
+        count = 0
+        while infer_coros and (n is None or count < n):
+            await infer_coros.pop(0)
+            count += 1
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield _InferHarness(ac, drain, drain_infer)
+    for coro in (*deploy_coros, *infer_coros):
+        coro.close()
+    concurrency.reset()
