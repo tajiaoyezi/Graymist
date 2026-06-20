@@ -11,6 +11,8 @@ export interface Model {
   task_type: TaskType;
   input_schema: Record<string, unknown>;
   output_schema: Record<string, unknown>;
+  version_count: number;
+  latest_version_status: VersionStatus | null;
   created_at: string;
   updated_at: string;
 }

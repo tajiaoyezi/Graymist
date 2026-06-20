@@ -18,7 +18,11 @@ export const zh = {
     versionDetail: "版本详情",
     newEndpoint: "创建端点",
   },
-  models: { subtitle: "注册 → 版本 → 就绪可部署", back: "← 返回模型列表" },
+  models: {
+    subtitle: "注册 → 版本 → 就绪可部署",
+    back: "← 返回模型列表",
+    versionCount: "{{count}} 个版本",
+  },
   playground: {
     subtitle: "按 Schema 动态生成表单 · 同步/异步 · 结果与延迟 · 会话历史",
     selectEndpoint: "目标端点",
@@ -148,7 +152,16 @@ export const zh = {
   },
   metrics: { title: "性能指标", accuracy: "准确率", latency: "延迟", throughput: "吞吐" },
   version: { list: "版本列表", compare: "版本对比", detail: "版本详情" },
-  error: { schema: "Schema 不合法", required: "必填项" },
+  error: {
+    schema: "Schema 不合法",
+    required: "必填项",
+    load: "加载失败",
+    action: "操作失败",
+    create: "创建失败",
+    loadEndpoints: "加载端点失败",
+    loadMetrics: "加载监控失败",
+    parseInput: "解析输入 Schema 失败",
+  },
 };
 
 export type Resource = typeof zh;

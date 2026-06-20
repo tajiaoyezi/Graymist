@@ -11,6 +11,14 @@ const TASK_TYPES: TaskType[] = [
   "custom",
 ];
 
+// 最新版本状态点配色（与原型 _statusMeta 一致）。
+const STATUS_DOT: Record<string, string> = {
+  draft: "var(--muted)",
+  validating: "#d97706",
+  ready: "#16a34a",
+  archived: "var(--faint)",
+};
+
 export function ModelList({
   api,
   onOpen,
@@ -87,6 +95,28 @@ export function ModelList({
               style={{ minHeight: 34 }}
             >
               {m.description}
+            </div>
+            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-border-soft">
+              <span className="text-faint text-xs">
+                {t("models.versionCount", { count: m.version_count })}
+              </span>
+              {m.latest_version_status && (
+                <span
+                  data-testid="model-status"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-bold"
+                  style={{ color: STATUS_DOT[m.latest_version_status] ?? "var(--faint)" }}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: STATUS_DOT[m.latest_version_status] ?? "var(--faint)",
+                    }}
+                  />
+                  {t(`status.${m.latest_version_status}`)}
+                </span>
+              )}
             </div>
           </div>
         ))}
