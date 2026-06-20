@@ -67,4 +67,18 @@ describe("ModelList", () => {
       ),
     );
   });
+
+  it("响应非数组(如异构后端 {items:[]})→ 不崩溃,兜底空列表", async () => {
+    const api = { listModels: vi.fn().mockResolvedValue({ items: [] }) };
+    render(<ModelList api={api as never} />);
+    // 过滤器仍渲染(未崩溃),且无模型卡片
+    expect(await screen.findByTestId("search-input")).toBeInTheDocument();
+    expect(screen.queryByTestId("model-item")).toBeNull();
+  });
+
+  it("加载失败 → 显示错误态而非空白", async () => {
+    const api = { listModels: vi.fn().mockRejectedValue(new Error("boom")) };
+    render(<ModelList api={api as never} />);
+    expect(await screen.findByTestId("list-error")).toBeInTheDocument();
+  });
 });

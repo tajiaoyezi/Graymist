@@ -30,13 +30,22 @@ export function ModelList({
   const [items, setItems] = useState<Model[]>([]);
   const [taskType, setTaskType] = useState("");
   const [q, setQ] = useState("");
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let active = true;
     api
       .listModels({ task_type: taskType || undefined, q: q || undefined })
       .then((rows) => {
-        if (active) setItems(rows);
+        if (!active) return;
+        setItems(Array.isArray(rows) ? rows : []); // 兜底:响应非数组时不崩溃白屏
+        setError(false);
+      })
+      .catch(() => {
+        if (active) {
+          setItems([]);
+          setError(true);
+        }
       });
     return () => {
       active = false;
@@ -69,6 +78,11 @@ export function ModelList({
           className="h-[38px] flex-1 min-w-[200px] max-w-[320px] rounded-[10px] border border-border bg-panel px-3.5 text-sm outline-none"
         />
       </div>
+      {error && (
+        <div data-testid="list-error" className="text-red-600 text-sm">
+          {t("error.load")}
+        </div>
+      )}
       <div
         style={{
           display: "grid",

@@ -166,6 +166,8 @@ export const zh = {
     schemaNotObject: "Schema 必须是 JSON 对象",
     taskTimeout: "任务超时未完成",
     requestFailed: "请求失败",
+    boundaryTitle: "页面渲染出错了",
+    reload: "刷新页面",
   },
 };
 
