@@ -1,5 +1,6 @@
 // 6.4：Schema 编辑器提交前的客户端合法性校验（JSON + 必须是对象）。
 // 后端会再做一次「合法 JSON Schema」的权威校验。
+// 失败时 error 返回 i18n key（而非硬编码文案），由调用方 t() 翻译后展示（§8.4）。
 
 export type SchemaParseResult =
   | { ok: true; value: Record<string, unknown> }
@@ -10,10 +11,10 @@ export function parseSchemaInput(text: string): SchemaParseResult {
   try {
     parsed = JSON.parse(text);
   } catch {
-    return { ok: false, error: "非法 JSON" };
+    return { ok: false, error: "error.invalidJson" };
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    return { ok: false, error: "Schema 必须是 JSON 对象" };
+    return { ok: false, error: "error.schemaNotObject" };
   }
   return { ok: true, value: parsed as Record<string, unknown> };
 }

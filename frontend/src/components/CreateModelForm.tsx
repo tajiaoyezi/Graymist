@@ -41,12 +41,12 @@ export function CreateModelForm({
     e.preventDefault();
     const inp = parseSchemaInput(inputSchema);
     if (!inp.ok) {
-      setError(`${t("field.inputSchema")}: ${inp.error}`);
+      setError(`${t("field.inputSchema")}: ${t(inp.error)}`);
       return;
     }
     const out = parseSchemaInput(outputSchema);
     if (!out.ok) {
-      setError(`${t("field.outputSchema")}: ${out.error}`);
+      setError(`${t("field.outputSchema")}: ${t(out.error)}`);
       return;
     }
     setError("");

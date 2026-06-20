@@ -108,7 +108,7 @@ export function PlaygroundPage() {
       return obj;
     }
     const parsed = parseSchemaInput(rawJson);
-    if (!parsed.ok) throw new Error(parsed.error);
+    if (!parsed.ok) throw new Error(t(parsed.error));
     return parsed.value;
   }
 
@@ -118,7 +118,7 @@ export function PlaygroundPage() {
       if (task.status === "succeeded" || task.status === "failed") return task;
       await new Promise((r) => setTimeout(r, POLL_MS));
     }
-    throw new Error("任务超时未完成");
+    throw new Error(t("error.taskTimeout"));
   }
 
   async function send() {
@@ -143,7 +143,8 @@ export function PlaygroundPage() {
       }
       if (alive.current) setHistory((h) => [item, ...h].slice(0, 20));
     } catch (e) {
-      if (alive.current) setError(e instanceof ApiError ? e.detail : e instanceof Error ? e.message : "请求失败");
+      if (alive.current)
+        setError(e instanceof ApiError ? e.detail : e instanceof Error ? e.message : t("error.requestFailed"));
     } finally {
       if (alive.current) setSending(false);
     }

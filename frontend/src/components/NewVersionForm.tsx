@@ -38,7 +38,7 @@ export function NewVersionForm({
     e.preventDefault();
     const rr = parseSchemaInput(resourceReq);
     if (!rr.ok) {
-      setError(`${t("field.resourceReq")}: ${rr.error}`);
+      setError(`${t("field.resourceReq")}: ${t(rr.error)}`);
       return;
     }
     setError("");

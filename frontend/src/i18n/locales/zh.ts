@@ -88,6 +88,7 @@ export const zh = {
     confirm: "确认",
     cancel: "取消",
     save: "保存",
+    edit: "编辑",
   },
   endpointStatus: {
     creating: "部署中",
@@ -151,7 +152,7 @@ export const zh = {
     no: "否",
   },
   metrics: { title: "性能指标", accuracy: "准确率", latency: "延迟", throughput: "吞吐" },
-  version: { list: "版本列表", compare: "版本对比", detail: "版本详情" },
+  version: { list: "版本列表", compare: "版本对比", detail: "版本详情", name: "版本" },
   error: {
     schema: "Schema 不合法",
     required: "必填项",
@@ -161,6 +162,10 @@ export const zh = {
     loadEndpoints: "加载端点失败",
     loadMetrics: "加载监控失败",
     parseInput: "解析输入 Schema 失败",
+    invalidJson: "非法 JSON",
+    schemaNotObject: "Schema 必须是 JSON 对象",
+    taskTimeout: "任务超时未完成",
+    requestFailed: "请求失败",
   },
 };
 
