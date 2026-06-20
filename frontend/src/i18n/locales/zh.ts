@@ -45,6 +45,8 @@ export const zh = {
     range24h: "24 小时",
     range7d: "7 天",
     autoRefresh: "自动刷新",
+    refreshInterval: "刷新间隔",
+    noEndpoints: "暂无端点",
     qps: "QPS",
     avgLatency: "平均延迟",
     p99: "P99 延迟",

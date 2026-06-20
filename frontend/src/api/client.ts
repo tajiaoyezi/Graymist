@@ -4,6 +4,7 @@ import type {
   Endpoint,
   EndpointBinding,
   InferResult,
+  Metrics,
   Model,
   QuotaInfo,
   Version,
@@ -115,6 +116,11 @@ export const api = {
     }),
   getInferenceTask: (taskId: string) =>
     req<AsyncTask>(`/inference/tasks/${taskId}`),
+  // a4 监控
+  getMetrics: (endpointId: string, range: string) =>
+    req<Metrics>(
+      `/monitoring/metrics?endpoint_id=${encodeURIComponent(endpointId)}&range=${range}`,
+    ),
 };
 
 export type Api = typeof api;

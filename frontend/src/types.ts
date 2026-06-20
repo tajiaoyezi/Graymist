@@ -85,3 +85,32 @@ export interface AsyncTask {
   created_at: string;
   finished_at: string | null;
 }
+
+// a4 监控指标
+export interface MetricBucket {
+  t: string;
+  qps: number;
+  avg_latency_ms: number;
+  p99_latency_ms: number;
+  error_rate: number; // 百分比 0..100
+}
+
+export interface VersionSeries {
+  version_id: string;
+  buckets: MetricBucket[];
+}
+
+export interface MetricsSummary {
+  qps: number;
+  avg_latency_ms: number;
+  p99_latency_ms: number;
+  error_rate: number;
+}
+
+export interface Metrics {
+  range: string;
+  buckets: MetricBucket[];
+  versions: VersionSeries[];
+  current_concurrency: number;
+  summary: MetricsSummary;
+}
