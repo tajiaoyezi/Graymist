@@ -43,7 +43,7 @@ export function EndpointForm({
         setModels(await api.listModels());
         setQuota(await api.getQuota());
       } catch (e) {
-        setError(e instanceof ApiError ? e.detail : "加载失败");
+        setError(e instanceof ApiError ? e.detail : t("error.load"));
       }
     })();
   }, []);
@@ -104,7 +104,7 @@ export function EndpointForm({
       });
       onSuccess();
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail : "创建失败");
+      setError(e instanceof ApiError ? e.detail : t("error.create"));
     }
   }
 

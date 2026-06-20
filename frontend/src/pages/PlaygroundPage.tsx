@@ -51,7 +51,7 @@ export function PlaygroundPage() {
         setEndpoints(running);
         if (running.length && !endpointId) setEndpointId(running[0].id);
       } catch (e) {
-        if (alive.current) setError(e instanceof ApiError ? e.detail : "加载端点失败");
+        if (alive.current) setError(e instanceof ApiError ? e.detail : t("error.loadEndpoints"));
       }
     })();
     return () => {
@@ -80,7 +80,7 @@ export function PlaygroundPage() {
         setFieldValues({});
         setRawJson("{}");
       } catch (e) {
-        if (!cancelled) setError(e instanceof ApiError ? e.detail : "解析输入 Schema 失败");
+        if (!cancelled) setError(e instanceof ApiError ? e.detail : t("error.parseInput"));
       }
     })();
     return () => {

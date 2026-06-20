@@ -20,7 +20,7 @@ export function VersionDetailPage() {
       setVersion(v);
       setModel(await api.getModel(v.model_id));
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail : "加载失败");
+      setError(e instanceof ApiError ? e.detail : t("error.load"));
     }
   }
 
@@ -99,7 +99,7 @@ export function VersionDetailPage() {
             setError("");
             setVersion(await api.transitionVersion(version.id, target));
           } catch (e) {
-            setError(e instanceof ApiError ? e.detail : "操作失败");
+            setError(e instanceof ApiError ? e.detail : t("error.action"));
           }
         }}
       />

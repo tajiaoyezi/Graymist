@@ -44,7 +44,7 @@ export function MonitoringPage() {
         setEndpoints(eps);
         if (eps.length && !endpointId) setEndpointId(eps[0].id);
       } catch (e) {
-        if (alive.current) setError(e instanceof ApiError ? e.detail : "加载端点失败");
+        if (alive.current) setError(e instanceof ApiError ? e.detail : t("error.loadEndpoints"));
       }
     })();
     return () => {
@@ -65,7 +65,7 @@ export function MonitoringPage() {
         setQuota(q);
         setError("");
       } catch (e) {
-        if (!cancelled && alive.current) setError(e instanceof ApiError ? e.detail : "加载监控失败");
+        if (!cancelled && alive.current) setError(e instanceof ApiError ? e.detail : t("error.loadMetrics"));
       }
     }
     void load();

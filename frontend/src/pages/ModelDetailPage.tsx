@@ -37,7 +37,7 @@ export function ModelDetailPage() {
       setVersions(await api.listVersions(modelId));
       setCompare(await api.compareVersions(modelId));
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail : "加载失败");
+      setError(e instanceof ApiError ? e.detail : t("error.load"));
     }
   }
 
