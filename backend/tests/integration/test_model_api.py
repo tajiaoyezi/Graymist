@@ -2,7 +2,7 @@
 （对应 spec 需求「模型 CRUD」「任务类型枚举」「输入输出 Schema 是一等公民」
 「模型仓库列表页」的后端契约）。
 """
-from .helpers import model_payload
+from .helpers import make_version, model_payload
 
 
 class TestCreateModel:
@@ -66,3 +66,25 @@ class TestModelDetailUpdateDelete:
 
     async def test_get_missing_returns_404(self, client):
         assert (await client.get("/models/does-not-exist")).status_code == 404
+
+
+class TestModelCardFields:
+    """§2.5 仓库列表卡片:版本数 + 最新版本状态点的后端契约。"""
+
+    async def test_no_versions_returns_zero_and_none(self, client):
+        # WHEN 模型尚无版本 THEN version_count=0、latest_version_status=None
+        mid = (await client.post("/models", json=model_payload())).json()["id"]
+        m = (await client.get(f"/models/{mid}")).json()
+        assert m["version_count"] == 0
+        assert m["latest_version_status"] is None
+
+    async def test_count_and_latest_status(self, client):
+        # WHEN 模型有多个版本、最新版本推进到 validating
+        # THEN 列表返回版本数与最新(created_at 最大)版本的状态
+        mid = (await client.post("/models", json=model_payload())).json()["id"]
+        await make_version(client, mid, version="v1")
+        v2 = await make_version(client, mid, version="v2")
+        await client.post(f"/versions/{v2}/transition", json={"target": "validating"})
+        m = next(x for x in (await client.get("/models")).json() if x["id"] == mid)
+        assert m["version_count"] == 2
+        assert m["latest_version_status"] == "validating"
