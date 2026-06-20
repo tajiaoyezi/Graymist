@@ -92,6 +92,12 @@ def get_controller(endpoint_id: str, capacity: int) -> CapacityController:
     return ctrl
 
 
+def current_in_flight(endpoint_id: str) -> int:
+    """端点当前在飞推理数(a4 监控只读 gauge)。无控制器返 0 且**不创建**(查询无副作用)。"""
+    ctrl = _controllers.get(endpoint_id)
+    return ctrl.in_flight if ctrl is not None else 0
+
+
 def reset() -> None:
     """清空注册表(测试隔离用)。"""
     _controllers.clear()

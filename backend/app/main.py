@@ -23,6 +23,7 @@ from app.inference.errors import (
 )
 from app.inference.router import router as inference_router
 from app.models.router import router as models_router
+from app.monitoring.router import router as monitoring_router
 from app.versions.router import router as versions_router
 
 
@@ -105,6 +106,7 @@ def create_app() -> FastAPI:
     app.include_router(versions_router)
     app.include_router(endpoints_router)
     app.include_router(inference_router)
+    app.include_router(monitoring_router)
     return app
 
 
