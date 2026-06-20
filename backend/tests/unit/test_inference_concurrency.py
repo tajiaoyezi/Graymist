@@ -99,3 +99,15 @@ def test_get_controller_adjusts_not_rebuild():
     assert c2.capacity == 5
     assert c2.in_flight == 1  # 在飞计数保留
     reset()
+
+
+def test_current_in_flight_reads_without_creating():
+    from app.inference import concurrency as cc
+
+    cc.reset()
+    assert cc.current_in_flight("epX") == 0  # 无控制器返 0
+    assert "epX" not in cc._controllers  # 且不创建控制器
+    ctrl = cc.get_controller("epX", 2)
+    ctrl.try_acquire()
+    assert cc.current_in_flight("epX") == 1
+    cc.reset()
