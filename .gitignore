@@ -15,6 +15,7 @@ venv/
 node_modules/
 dist/
 .vite/
+*.tsbuildinfo
 
 # 测试 / E2E 产物
 *.db

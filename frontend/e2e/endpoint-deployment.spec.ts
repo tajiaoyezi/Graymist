@@ -43,8 +43,9 @@ test("端点部署 → A/B → 异步状态流转 全流程", async ({ page, req
     versionIds.push(ver.id);
   }
 
-  // 2) 管控台 → 创建端点表单
-  await page.goto("/endpoints/new");
+  // 2) 管控台 → 打开「创建端点」弹窗(忠实原型:控制台内 Modal)
+  await page.goto("/endpoints");
+  await page.getByRole("button", { name: "创建端点" }).click();
   await page.getByTestId("ep-name").fill(epName);
   await page.getByTestId("ep-url").fill(urlPath);
   await page.getByTestId("ep-model").selectOption(model.id);
@@ -60,7 +61,7 @@ test("端点部署 → A/B → 异步状态流转 全流程", async ({ page, req
   await expect(page).toHaveURL(/\/endpoints$/);
 
   // 5) 端点行:creating → running(后台耗时 0,轮询自动刷新)
-  const row = page.locator("li").filter({ hasText: epName });
+  const row = page.getByRole("row").filter({ hasText: epName });
   await expect(row.getByText("运行中")).toBeVisible();
 
   // 6) 停止(危险操作二次确认)→ 后台转 stopped
