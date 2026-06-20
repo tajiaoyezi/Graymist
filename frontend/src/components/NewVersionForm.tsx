@@ -16,6 +16,9 @@ export interface NewVersionInput {
 
 const FRAMEWORKS: Framework[] = ["PyTorch", "ONNX", "TensorRT"];
 
+const INPUT =
+  "border border-border rounded-[9px] px-3 py-2 w-full bg-panel text-sm outline-none";
+
 export function NewVersionForm({
   onSubmit,
 }: {
@@ -53,26 +56,29 @@ export function NewVersionForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-2 border rounded p-3 my-2">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-2 border border-border-soft rounded-[12px] p-3 my-2 bg-surface2"
+    >
       <input
         data-testid="nv-version"
         placeholder={t("field.name")}
         value={version}
         onChange={(e) => setVersion(e.target.value)}
-        className="border rounded px-2 py-1 w-full"
+        className={INPUT}
       />
       <input
         data-testid="nv-file-path"
         placeholder={t("field.filePath")}
         value={filePath}
         onChange={(e) => setFilePath(e.target.value)}
-        className="border rounded px-2 py-1 w-full"
+        className={INPUT}
       />
       <select
         data-testid="nv-framework"
         value={framework}
         onChange={(e) => setFramework(e.target.value as Framework)}
-        className="border rounded px-2 py-1 w-full"
+        className={INPUT}
       >
         {FRAMEWORKS.map((f) => (
           <option key={f} value={f}>
@@ -85,14 +91,14 @@ export function NewVersionForm({
         value={resourceReq}
         onChange={(e) => setResourceReq(e.target.value)}
         rows={2}
-        className="border rounded px-2 py-1 w-full font-mono text-sm"
+        className={`${INPUT} mono`}
       />
       <input
         data-testid="nv-change-note"
         placeholder={t("field.changeNote")}
         value={changeNote}
         onChange={(e) => setChangeNote(e.target.value)}
-        className="border rounded px-2 py-1 w-full"
+        className={INPUT}
       />
       {error && (
         <div data-testid="nv-error" className="text-red-600 text-sm">
@@ -102,7 +108,7 @@ export function NewVersionForm({
       <button
         data-testid="nv-submit"
         type="submit"
-        className="bg-blue-600 text-white rounded px-3 py-1"
+        className="bg-accent text-white rounded-lg px-3 py-1.5 font-bold text-sm"
       >
         {t("action.create")}
       </button>

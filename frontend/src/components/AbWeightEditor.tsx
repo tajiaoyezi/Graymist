@@ -8,8 +8,8 @@ export interface WeightBinding {
   label?: string;
 }
 
-// A/B 权重编辑器：实时显示权重之和，和≠100（或单条越界）时报错。
-// 校验有效性由 weightsValid 提供，父表单据此禁用提交（5.7）。
+// A/B 权重编辑器:滑块 + 同步数值框(保留 weight-input testid 与无障碍可达)。
+// 实时显示权重之和,和≠100(或单条越界)时报错;校验由 weightsValid 提供,父表单据此禁用提交。
 export function AbWeightEditor({
   bindings,
   onChange,
@@ -31,22 +31,44 @@ export function AbWeightEditor({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {bindings.map((b) => (
-        <div key={b.model_version_id} className="flex items-center gap-2">
-          <span className="text-sm">{b.label ?? b.model_version_id}</span>
+        <div
+          key={b.model_version_id}
+          className="bg-surface2 border border-border-soft rounded-[10px] p-2.5"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="mono text-[13px] font-bold w-10">
+              {b.label ?? b.model_version_id}
+            </span>
+            <span className="flex-1" />
+            <input
+              type="number"
+              data-testid={`weight-input-${b.model_version_id}`}
+              value={b.weight}
+              onChange={(e) => setWeight(b.model_version_id, e.target.value)}
+              className="mono w-[64px] border border-border rounded-md px-2 py-1 text-right text-sm bg-panel outline-none"
+            />
+            <span className="text-xs text-muted">%</span>
+          </div>
           <input
-            type="number"
-            data-testid={`weight-input-${b.model_version_id}`}
-            value={b.weight}
+            type="range"
+            min={0}
+            max={100}
+            value={Number.isFinite(b.weight) ? b.weight : 0}
             onChange={(e) => setWeight(b.model_version_id, e.target.value)}
-            className="border rounded px-2 py-1 w-24"
+            aria-label={`${b.label ?? b.model_version_id} ${t("endpoint.weight")}`}
+            className="w-full mt-2 cursor-pointer"
+            style={{ accentColor: "var(--accent)" }}
           />
-          <span className="text-xs text-gray-500">{t("endpoint.weight")}</span>
         </div>
       ))}
-      <div className="text-sm" data-testid="weight-sum">
-        {t("endpoint.weightSum")}: {sum}
+      <div
+        data-testid="weight-sum"
+        className="text-sm font-extrabold"
+        style={{ color: valid ? "var(--text)" : "#dc2626" }}
+      >
+        {t("endpoint.weightSum")}: {sum}%
       </div>
       {!valid && (
         <div data-testid="weight-error" className="text-red-600 text-sm">

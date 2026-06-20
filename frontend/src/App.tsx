@@ -1,34 +1,27 @@
-import { Link, Navigate, Route, Routes } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+import { Navigate, Route, Routes } from "react-router-dom";
 
+import { AppLayout } from "./components/AppLayout";
 import { CreateModelPage } from "./pages/CreateModelPage";
 import { DeploymentConsolePage } from "./pages/DeploymentConsolePage";
-import { EndpointFormPage } from "./pages/EndpointFormPage";
 import { ModelDetailPage } from "./pages/ModelDetailPage";
 import { ModelsPage } from "./pages/ModelsPage";
+import { MonitoringPage } from "./pages/MonitoringPage";
+import { PlaygroundPage } from "./pages/PlaygroundPage";
 import { VersionDetailPage } from "./pages/VersionDetailPage";
 
 export default function App() {
-  const { t } = useTranslation();
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <header className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold">{t("app.title")}</h1>
-        <nav className="flex gap-4 text-blue-600">
-          <Link to="/models">{t("nav.models")}</Link>
-          <Link to="/models/new">{t("nav.create")}</Link>
-          <Link to="/endpoints">{t("nav.deployments")}</Link>
-        </nav>
-      </header>
-      <Routes>
+    <Routes>
+      <Route element={<AppLayout />}>
         <Route path="/" element={<Navigate to="/models" replace />} />
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/models/new" element={<CreateModelPage />} />
         <Route path="/models/:modelId" element={<ModelDetailPage />} />
         <Route path="/versions/:versionId" element={<VersionDetailPage />} />
         <Route path="/endpoints" element={<DeploymentConsolePage />} />
-        <Route path="/endpoints/new" element={<EndpointFormPage />} />
-      </Routes>
-    </div>
+        <Route path="/playground" element={<PlaygroundPage />} />
+        <Route path="/monitoring" element={<MonitoringPage />} />
+      </Route>
+    </Routes>
   );
 }

@@ -18,7 +18,7 @@ export function VersionActions({
           type="button"
           data-testid={`transition-${s}`}
           onClick={() => onTransition(s)}
-          className="border rounded px-3 py-1 hover:bg-gray-50"
+          className="border border-border rounded-lg px-3 py-1.5 text-sm font-semibold text-text2 bg-panel hover:bg-surface"
         >
           {t("action.transitionTo", { status: t(`status.${s}`) })}
         </button>

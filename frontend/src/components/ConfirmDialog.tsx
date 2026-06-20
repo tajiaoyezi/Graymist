@@ -18,16 +18,17 @@ export function ConfirmDialog({
     <div
       role="dialog"
       data-testid="confirm-dialog"
-      className="fixed inset-0 flex items-center justify-center bg-black/30"
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ background: "rgba(15,23,42,.45)", zIndex: 95 }}
     >
-      <div className="bg-white rounded p-4 space-y-3 shadow">
-        <p className="text-sm">{message}</p>
-        <div className="flex justify-end gap-2">
+      <div className="bg-panel rounded-2xl p-5 space-y-4 shadow-xl" style={{ minWidth: 320 }}>
+        <p className="text-sm text-text m-0">{message}</p>
+        <div className="flex justify-end gap-2.5">
           <button
             type="button"
             data-testid="confirm-no"
             onClick={onCancel}
-            className="border rounded px-3 py-1"
+            className="border border-border rounded-[10px] px-4 py-2 font-bold text-sm text-text2 bg-panel"
           >
             {t("action.cancel")}
           </button>
@@ -35,7 +36,8 @@ export function ConfirmDialog({
             type="button"
             data-testid="confirm-yes"
             onClick={onConfirm}
-            className="border rounded px-3 py-1 bg-red-600 text-white"
+            className="rounded-[10px] px-4 py-2 font-bold text-sm text-white"
+            style={{ background: "#dc2626" }}
           >
             {t("action.confirm")}
           </button>

@@ -21,6 +21,9 @@ const TASK_TYPES: TaskType[] = [
   "custom",
 ];
 
+const INPUT =
+  "border border-border rounded-[9px] px-3 py-2 w-full bg-panel text-sm outline-none mt-1";
+
 export function CreateModelForm({
   onSubmit,
 }: {
@@ -56,38 +59,40 @@ export function CreateModelForm({
         output_schema: out.value,
       });
     } catch (err) {
-      // 后端 4xx（如 422/重名）也回显到表单错误区（M1）
       setError(err instanceof ApiError ? err.detail : String(err));
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 max-w-xl">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-3 max-w-xl bg-panel border border-border rounded-[14px] p-5"
+    >
       <label className="block">
-        <span className="text-sm">{t("field.name")}</span>
+        <span className="text-xs font-bold text-muted">{t("field.name")}</span>
         <input
           data-testid="input-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="border rounded px-2 py-1 w-full"
+          className={INPUT}
         />
       </label>
       <label className="block">
-        <span className="text-sm">{t("field.description")}</span>
+        <span className="text-xs font-bold text-muted">{t("field.description")}</span>
         <input
           data-testid="input-description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="border rounded px-2 py-1 w-full"
+          className={INPUT}
         />
       </label>
       <label className="block">
-        <span className="text-sm">{t("filter.taskType")}</span>
+        <span className="text-xs font-bold text-muted">{t("filter.taskType")}</span>
         <select
           data-testid="input-task-type"
           value={taskType}
           onChange={(e) => setTaskType(e.target.value as TaskType)}
-          className="border rounded px-2 py-1 w-full"
+          className={INPUT}
         >
           {TASK_TYPES.map((tt) => (
             <option key={tt} value={tt}>
@@ -97,23 +102,23 @@ export function CreateModelForm({
         </select>
       </label>
       <label className="block">
-        <span className="text-sm">{t("field.inputSchema")}</span>
+        <span className="text-xs font-bold text-muted">{t("field.inputSchema")}</span>
         <textarea
           data-testid="input-schema"
           value={inputSchema}
           onChange={(e) => setInputSchema(e.target.value)}
           rows={4}
-          className="border rounded px-2 py-1 w-full font-mono text-sm"
+          className={`${INPUT} mono`}
         />
       </label>
       <label className="block">
-        <span className="text-sm">{t("field.outputSchema")}</span>
+        <span className="text-xs font-bold text-muted">{t("field.outputSchema")}</span>
         <textarea
           data-testid="output-schema"
           value={outputSchema}
           onChange={(e) => setOutputSchema(e.target.value)}
           rows={4}
-          className="border rounded px-2 py-1 w-full font-mono text-sm"
+          className={`${INPUT} mono`}
         />
       </label>
       {error && (
@@ -124,7 +129,7 @@ export function CreateModelForm({
       <button
         data-testid="submit"
         type="submit"
-        className="bg-blue-600 text-white rounded px-4 py-2"
+        className="bg-accent text-white rounded-[10px] px-4 py-2 font-bold text-sm"
       >
         {t("action.create")}
       </button>

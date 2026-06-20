@@ -14,6 +14,13 @@ interface CompareRow {
   metrics: VersionMetrics | null;
 }
 
+const STATUS_BADGE: Record<string, string> = {
+  draft: "text-text2 bg-surface",
+  validating: "text-accent bg-accent-soft",
+  ready: "text-white",
+  archived: "text-faint bg-surface",
+};
+
 export function ModelDetailPage() {
   const { t, i18n } = useTranslation();
   const { modelId = "" } = useParams();
@@ -52,76 +59,107 @@ export function ModelDetailPage() {
     accuracy: c.metrics?.accuracy ?? 0,
   }));
 
+  const card = "bg-panel border border-border rounded-[14px]";
+
   return (
-    <div className="space-y-6">
-      <section>
-        <h2 className="text-lg font-semibold">{model.name}</h2>
-        <p className="text-gray-500">
-          {t(`taskType.${model.task_type}`)} · {model.description}
-        </p>
-        <p className="text-sm text-gray-400">
-          {t("field.createdAt")}: {formatDateTime(model.created_at, i18n.language)}
-        </p>
-      </section>
+    <div className="space-y-4">
+      <Link
+        to="/models"
+        className="inline-block text-muted text-[13px] font-bold no-underline"
+      >
+        {t("models.back")}
+      </Link>
 
-      <section>
-        <div className="flex justify-between items-center">
-          <h3 className="font-semibold">{t("version.list")}</h3>
-          <button
-            type="button"
-            className="text-blue-600"
-            onClick={() => setShowForm((v) => !v)}
-          >
-            {t("action.newVersion")}
-          </button>
+      <div>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <h2 className="m-0 text-[22px] font-extrabold tracking-tight">{model.name}</h2>
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md text-text2 bg-surface">
+            {t(`taskType.${model.task_type}`)}
+          </span>
         </div>
-        {showForm && (
-          <NewVersionForm
-            onSubmit={async (body) => {
-              await api.createVersion(modelId, body);
-              setShowForm(false);
-              await reload();
-            }}
-          />
-        )}
-        <table className="w-full text-sm mt-2">
-          <thead>
-            <tr className="text-left text-gray-500">
-              <th>{t("field.name")}</th>
-              <th>{t("field.status")}</th>
-              <th>{t("field.createdAt")}</th>
-              <th>{t("field.resourceReq")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {versions.map((v) => (
-              <tr key={v.id} className="border-t">
-                <td>
-                  <Link className="text-blue-600" to={`/versions/${v.id}`}>
-                    {v.version}
-                  </Link>
-                </td>
-                <td>{t(`status.${v.status}`)}</td>
-                <td>{formatDateTime(v.created_at, i18n.language)}</td>
-                <td>{JSON.stringify(v.resource_req)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+        <div className="text-muted text-[13px] mt-1">
+          {model.description} · {t("field.createdAt")}{" "}
+          {formatDateTime(model.created_at, i18n.language)}
+        </div>
+      </div>
 
-      <section>
-        <h3 className="font-semibold">
-          {t("version.compare")}（{t("metrics.accuracy")}）
-        </h3>
-        <BarChart width={480} height={240} data={chartData}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="version" />
-          <YAxis />
-          <Tooltip />
-          <Bar dataKey="accuracy" fill="#2563eb" />
-        </BarChart>
-      </section>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 16, alignItems: "start" }}>
+        {/* left: versions + compare */}
+        <div className="space-y-4">
+          <div className={card} style={{ overflow: "hidden" }}>
+            <div className="flex justify-between items-center px-[18px] py-3.5 border-b border-border-soft">
+              <span className="font-extrabold text-sm">{t("version.list")}</span>
+              <button
+                type="button"
+                className="text-accent text-[13px] font-bold"
+                onClick={() => setShowForm((v) => !v)}
+              >
+                {t("action.newVersion")}
+              </button>
+            </div>
+            {showForm && (
+              <div className="px-[18px] py-2">
+                <NewVersionForm
+                  onSubmit={async (body) => {
+                    await api.createVersion(modelId, body);
+                    setShowForm(false);
+                    await reload();
+                  }}
+                />
+              </div>
+            )}
+            {versions.map((v) => (
+              <Link
+                key={v.id}
+                to={`/versions/${v.id}`}
+                className="flex items-center gap-3 px-[18px] py-3 border-b border-border-soft no-underline text-text hover:bg-surface2"
+              >
+                <span className="mono font-bold text-[13px] w-[42px]">{v.version}</span>
+                <span
+                  className={`text-[10.5px] font-bold px-2 py-0.5 rounded-md ${STATUS_BADGE[v.status] ?? "text-text2 bg-surface"}`}
+                  style={v.status === "ready" ? { background: "var(--accent)" } : undefined}
+                >
+                  {t(`status.${v.status}`)}
+                </span>
+                <span className="flex-1" />
+                <span className="text-[11.5px] text-faint">{t(`framework.${v.framework}`)}</span>
+                <span className="mono text-[11px] text-faint2">
+                  {formatDateTime(v.created_at, i18n.language)}
+                </span>
+              </Link>
+            ))}
+          </div>
+
+          <div className={card} style={{ padding: "16px 18px" }}>
+            <div className="font-extrabold text-sm mb-2.5">
+              {t("version.compare")}（{t("metrics.accuracy")}）
+            </div>
+            <BarChart width={460} height={220} data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="version" stroke="var(--muted)" fontSize={11} />
+              <YAxis stroke="var(--muted)" fontSize={11} />
+              <Tooltip />
+              <Bar dataKey="accuracy" fill="var(--accent)" />
+            </BarChart>
+          </div>
+        </div>
+
+        {/* right: meta + schema */}
+        <div className="space-y-4">
+          <div className={card} style={{ padding: "16px 18px" }}>
+            <div className="font-extrabold text-[13px] mb-3">{t("field.inputSchema")}</div>
+            <pre className="mono m-0 mb-3.5 p-3 rounded-[9px] text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap"
+              style={{ background: "#0e1525", color: "#a5b4fc" }}>
+              {JSON.stringify(model.input_schema, null, 2)}
+            </pre>
+            <div className="font-extrabold text-[13px] mb-1.5">{t("field.outputSchema")}</div>
+            <pre className="mono m-0 p-3 rounded-[9px] text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap"
+              style={{ background: "#0e1525", color: "#86efac" }}>
+              {JSON.stringify(model.output_schema, null, 2)}
+            </pre>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

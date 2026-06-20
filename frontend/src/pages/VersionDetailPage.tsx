@@ -37,48 +37,55 @@ export function VersionDetailPage() {
   }
   if (!version || !model) return null;
 
+  const card = "bg-panel border border-border rounded-[14px]";
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold">
-        {model.name} / {version.version}
-      </h2>
-      <div className="text-sm">
+      <div className="flex items-center gap-2.5">
+        <h2 className="m-0 text-[22px] font-extrabold tracking-tight">
+          {model.name} / <span className="mono">{version.version}</span>
+        </h2>
+      </div>
+      <div className="text-[13px] text-text2">
         {t("field.status")}: {t(`status.${version.status}`)} · {t("field.deployable")}:{" "}
-        <span data-testid="deployable">
+        <span data-testid="deployable" className="font-bold">
           {version.deployable ? t("field.yes") : t("field.no")}
         </span>
       </div>
 
-      <section>
-        <h3 className="font-semibold">{t("field.inputSchema")}</h3>
-        <pre className="bg-gray-50 p-3 rounded text-sm overflow-auto">
+      <div className={card} style={{ padding: "16px 18px" }}>
+        <div className="font-extrabold text-[13px] mb-1.5">{t("field.inputSchema")}</div>
+        <pre className="mono m-0 mb-3.5 p-3 rounded-[9px] text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap"
+          style={{ background: "#0e1525", color: "#a5b4fc" }}>
           {JSON.stringify(model.input_schema, null, 2)}
         </pre>
-        <h3 className="font-semibold mt-2">{t("field.outputSchema")}</h3>
-        <pre className="bg-gray-50 p-3 rounded text-sm overflow-auto">
+        <div className="font-extrabold text-[13px] mb-1.5">{t("field.outputSchema")}</div>
+        <pre className="mono m-0 p-3 rounded-[9px] text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap"
+          style={{ background: "#0e1525", color: "#86efac" }}>
           {JSON.stringify(model.output_schema, null, 2)}
         </pre>
-      </section>
+      </div>
 
-      <section>
-        <h3 className="font-semibold">{t("metrics.title")}</h3>
-        <ul className="text-sm">
-          <li>
-            {t("metrics.accuracy")}: {version.metrics?.accuracy ?? "—"}
-          </li>
-          <li>
-            {t("metrics.latency")}: {version.metrics?.latency ?? "—"}
-          </li>
-          <li>
-            {t("metrics.throughput")}: {version.metrics?.throughput ?? "—"}
-          </li>
-        </ul>
-      </section>
+      <div className={card} style={{ padding: "16px 18px" }}>
+        <div className="font-extrabold text-[13px] mb-2.5">{t("metrics.title")}</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 9 }}>
+          {[
+            { k: "accuracy", v: version.metrics?.accuracy },
+            { k: "latency", v: version.metrics?.latency },
+            { k: "throughput", v: version.metrics?.throughput },
+          ].map((m) => (
+            <div key={m.k} className="bg-surface2 border border-border-soft rounded-[9px] p-2.5">
+              <div className="text-[10.5px] text-faint font-bold">{t(`metrics.${m.k}`)}</div>
+              <div className="mono text-base font-extrabold mt-0.5">{m.v ?? "—"}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
-      <section>
-        <h3 className="font-semibold">{t("field.changeNote")}</h3>
-        <p className="text-sm">{version.change_note}</p>
-      </section>
+      <div className={card} style={{ padding: "16px 18px" }}>
+        <div className="font-extrabold text-[13px] mb-1.5">{t("field.changeNote")}</div>
+        <p className="text-[13px] text-text2 m-0">{version.change_note}</p>
+      </div>
 
       {error && (
         <div data-testid="action-error" className="text-red-600 text-sm">
@@ -92,7 +99,6 @@ export function VersionDetailPage() {
             setError("");
             setVersion(await api.transitionVersion(version.id, target));
           } catch (e) {
-            // 非法流转 409 / 其它错误回显，而非静默 rejection（M1 / L6）
             setError(e instanceof ApiError ? e.detail : "操作失败");
           }
         }}

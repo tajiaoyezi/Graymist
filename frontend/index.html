@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Graymist 模型仓库</title>
+    <script>
+      // 首屏前置:按 localStorage 设初始主题/主题色,避免 FOUC(与 ThemeProvider 同 key)。
+      (function () {
+        try {
+          var r = document.documentElement;
+          var t = localStorage.getItem("graymist-theme");
+          r.dataset.theme = t === "dark" ? "dark" : "light";
+          var a = localStorage.getItem("graymist-accent");
+          if (a) r.style.setProperty("--accent", a);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
