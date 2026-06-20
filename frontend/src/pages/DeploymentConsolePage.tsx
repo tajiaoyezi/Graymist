@@ -27,6 +27,7 @@ export function DeploymentConsolePage() {
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editing, setEditing] = useState<Endpoint | null>(null);
   const [confirm, setConfirm] = useState<{ id: string; op: DangerOp; message: string } | null>(
     null,
   );
@@ -174,6 +175,15 @@ export function DeploymentConsolePage() {
                         <div className="flex gap-2 justify-end">
                           <button
                             type="button"
+                            data-testid={`edit-${ep.id}`}
+                            disabled={isTransitioning(ep.status)}
+                            onClick={() => setEditing(ep)}
+                            className={opBtn}
+                          >
+                            {t("action.edit")}
+                          </button>
+                          <button
+                            type="button"
                             data-testid={`start-${ep.id}`}
                             disabled={!canStart(ep.status)}
                             onClick={() => void act(ep.id, "start")}
@@ -210,16 +220,19 @@ export function DeploymentConsolePage() {
         </div>
       )}
 
-      {/* 创建端点弹窗 */}
-      {modalOpen && (
+      {/* 创建 / 编辑端点弹窗 */}
+      {(modalOpen || editing) && (
         <>
           <div
-            onClick={() => setModalOpen(false)}
+            onClick={() => {
+              setModalOpen(false);
+              setEditing(null);
+            }}
             style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 90 }}
           />
           <div
             role="dialog"
-            aria-label={t("endpoint.create")}
+            aria-label={editing ? t("endpoint.edit") : t("endpoint.create")}
             style={{
               position: "fixed",
               top: "50%",
@@ -235,15 +248,21 @@ export function DeploymentConsolePage() {
             className="bg-panel rounded-2xl"
           >
             <div className="px-6 py-5 border-b border-border-soft font-extrabold text-base">
-              {t("endpoint.create")}
+              {editing ? t("endpoint.edit") : t("endpoint.create")}
             </div>
             <div className="px-6 py-5">
               <EndpointForm
+                key={editing?.id ?? "create"}
+                endpoint={editing ?? undefined}
                 onSuccess={() => {
                   setModalOpen(false);
+                  setEditing(null);
                   void load();
                 }}
-                onCancel={() => setModalOpen(false)}
+                onCancel={() => {
+                  setModalOpen(false);
+                  setEditing(null);
+                }}
               />
             </div>
           </div>

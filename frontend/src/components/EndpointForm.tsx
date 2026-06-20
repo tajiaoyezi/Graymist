@@ -5,7 +5,7 @@ import { ApiError, api } from "../api/client";
 import { AbWeightEditor, type WeightBinding } from "./AbWeightEditor";
 import { QuotaUsage } from "./QuotaUsage";
 import { weightsValid } from "../domain/endpointStateMachine";
-import type { Model, QuotaInfo, Version } from "../types";
+import type { Endpoint, Model, QuotaInfo, ResourceQuota, Version } from "../types";
 
 const EMPTY_QUOTA: QuotaInfo = {
   total: { cpu: 0, memory: 0, gpu: 0 },
@@ -13,27 +13,31 @@ const EMPTY_QUOTA: QuotaInfo = {
   remaining: { cpu: 0, memory: 0, gpu: 0 },
 };
 
-// 创建端点表单(供控制台弹窗与独立页包装复用)。保留全部 testid 与校验行为。
+// 创建/编辑端点表单(供控制台弹窗与独立页包装复用)。保留全部 testid 与校验行为。
+// 传入 endpoint → 编辑模式:预填配置、name/url_path 只读(后端不可改),提交走 updateEndpoint。
 export function EndpointForm({
+  endpoint,
   onSuccess,
   onCancel,
 }: {
+  endpoint?: Endpoint;
   onSuccess: () => void;
   onCancel?: () => void;
 }) {
   const { t } = useTranslation();
+  const isEdit = !!endpoint;
   const [models, setModels] = useState<Model[]>([]);
   const [modelId, setModelId] = useState("");
   const [versions, setVersions] = useState<Version[]>([]);
   const [bindings, setBindings] = useState<WeightBinding[]>([]);
-  const [name, setName] = useState("");
-  const [urlPath, setUrlPath] = useState("");
-  const [replicas, setReplicas] = useState(1);
-  const [cpu, setCpu] = useState(1);
-  const [memory, setMemory] = useState(100);
-  const [gpu, setGpu] = useState(0);
-  const [timeoutMs, setTimeoutMs] = useState(30000);
-  const [maxConc, setMaxConc] = useState(4);
+  const [name, setName] = useState(endpoint?.name ?? "");
+  const [urlPath, setUrlPath] = useState(endpoint?.url_path ?? "");
+  const [replicas, setReplicas] = useState(endpoint?.replicas ?? 1);
+  const [cpu, setCpu] = useState(endpoint?.resource_quota.cpu ?? 1);
+  const [memory, setMemory] = useState(endpoint?.resource_quota.memory ?? 100);
+  const [gpu, setGpu] = useState(endpoint?.resource_quota.gpu ?? 0);
+  const [timeoutMs, setTimeoutMs] = useState(endpoint?.timeout_ms ?? 30000);
+  const [maxConc, setMaxConc] = useState(endpoint?.max_concurrency ?? 4);
   const [quota, setQuota] = useState<QuotaInfo>(EMPTY_QUOTA);
   const [error, setError] = useState("");
 
@@ -42,6 +46,20 @@ export function EndpointForm({
       try {
         setModels(await api.listModels());
         setQuota(await api.getQuota());
+        if (endpoint && endpoint.bindings.length) {
+          // 编辑模式:从首个绑定回溯所属 Model,载入其 ready 版本并预填权重。
+          const v0 = await api.getVersion(endpoint.bindings[0].model_version_id);
+          const vs = (await api.listVersions(v0.model_id)).filter((x) => x.status === "ready");
+          setModelId(v0.model_id);
+          setVersions(vs);
+          setBindings(
+            endpoint.bindings.map((b) => ({
+              model_version_id: b.model_version_id,
+              weight: b.weight,
+              label: vs.find((x) => x.id === b.model_version_id)?.version ?? b.model_version_id,
+            })),
+          );
+        }
       } catch (e) {
         setError(e instanceof ApiError ? e.detail : t("error.load"));
       }
@@ -71,10 +89,33 @@ export function EndpointForm({
     () => ({ cpu: replicas * cpu, memory: replicas * memory, gpu: replicas * gpu }),
     [replicas, cpu, memory, gpu],
   );
+  // 编辑在线端点时,后端配额校验排除该端点自身占用(_active_usages exclude_id);
+  // 故前端把它当前占用加回剩余,避免误判超额而禁用提交。
+  const displayQuota = useMemo<QuotaInfo>(() => {
+    if (!endpoint || endpoint.status !== "running") return quota;
+    const self: ResourceQuota = {
+      cpu: endpoint.replicas * endpoint.resource_quota.cpu,
+      memory: endpoint.replicas * endpoint.resource_quota.memory,
+      gpu: endpoint.replicas * endpoint.resource_quota.gpu,
+    };
+    return {
+      total: quota.total,
+      used: {
+        cpu: Math.max(0, quota.used.cpu - self.cpu),
+        memory: Math.max(0, quota.used.memory - self.memory),
+        gpu: Math.max(0, quota.used.gpu - self.gpu),
+      },
+      remaining: {
+        cpu: quota.remaining.cpu + self.cpu,
+        memory: quota.remaining.memory + self.memory,
+        gpu: quota.remaining.gpu + self.gpu,
+      },
+    };
+  }, [endpoint, quota]);
   const over =
-    pending.cpu > quota.remaining.cpu ||
-    pending.memory > quota.remaining.memory ||
-    pending.gpu > quota.remaining.gpu;
+    pending.cpu > displayQuota.remaining.cpu ||
+    pending.memory > displayQuota.remaining.memory ||
+    pending.gpu > displayQuota.remaining.gpu;
   const valid =
     name.length > 0 &&
     urlPath.length > 0 &&
@@ -88,20 +129,32 @@ export function EndpointForm({
     !over;
 
   async function submit() {
+    const mappedBindings = bindings.map((b) => ({
+      model_version_id: b.model_version_id,
+      weight: b.weight,
+    }));
     try {
       setError("");
-      await api.createEndpoint({
-        name,
-        url_path: urlPath,
-        replicas,
-        resource_quota: { cpu, memory, gpu },
-        timeout_ms: timeoutMs,
-        max_concurrency: maxConc,
-        bindings: bindings.map((b) => ({
-          model_version_id: b.model_version_id,
-          weight: b.weight,
-        })),
-      });
+      if (endpoint) {
+        // 编辑:仅提交后端可改字段(name/url_path 不可变);权重整体替换由后端原子完成。
+        await api.updateEndpoint(endpoint.id, {
+          replicas,
+          resource_quota: { cpu, memory, gpu },
+          timeout_ms: timeoutMs,
+          max_concurrency: maxConc,
+          bindings: mappedBindings,
+        });
+      } else {
+        await api.createEndpoint({
+          name,
+          url_path: urlPath,
+          replicas,
+          resource_quota: { cpu, memory, gpu },
+          timeout_ms: timeoutMs,
+          max_concurrency: maxConc,
+          bindings: mappedBindings,
+        });
+      }
       onSuccess();
     } catch (e) {
       setError(e instanceof ApiError ? e.detail : t("error.create"));
@@ -146,7 +199,8 @@ export function EndpointForm({
             data-testid="ep-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className={field}
+            readOnly={isEdit}
+            className={`${field}${isEdit ? " opacity-60" : ""}`}
           />
         </div>
         <div>
@@ -155,7 +209,8 @@ export function EndpointForm({
             data-testid="ep-url"
             value={urlPath}
             onChange={(e) => setUrlPath(e.target.value)}
-            className={field}
+            readOnly={isEdit}
+            className={`${field}${isEdit ? " opacity-60" : ""}`}
           />
         </div>
       </div>
@@ -211,7 +266,7 @@ export function EndpointForm({
           {numField("ep-memory", memory, setMemory, t("quota.memory"))}
           {numField("ep-gpu", gpu, setGpu, t("quota.gpu"))}
         </div>
-        <QuotaUsage quota={quota} pending={pending} />
+        <QuotaUsage quota={displayQuota} pending={pending} />
       </div>
 
       <div className="grid grid-cols-2 gap-3.5">
@@ -236,7 +291,7 @@ export function EndpointForm({
           className="h-10 px-4 rounded-[10px] text-white font-bold text-sm disabled:opacity-40"
           style={{ background: "var(--accent)" }}
         >
-          {t("endpoint.deploy")}
+          {isEdit ? t("action.save") : t("endpoint.deploy")}
         </button>
       </div>
     </form>
