@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.domain.enums import TaskType
+from app.domain.enums import TaskType, VersionStatus
 
 
 class ModelCreate(BaseModel):
@@ -31,5 +31,8 @@ class ModelOut(BaseModel):
     task_type: TaskType
     input_schema: dict
     output_schema: dict
+    # 模型仓库列表卡片用(§2.5):版本数与最新版本状态点。
+    version_count: int = 0
+    latest_version_status: VersionStatus | None = None
     created_at: datetime
     updated_at: datetime

@@ -1,7 +1,7 @@
 """Model 资源服务层。"""
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.errors import NotFoundError
@@ -15,6 +15,38 @@ def _tt(value: Any) -> str:
 
 
 class ModelService:
+    @staticmethod
+    async def _decorate(
+        session: AsyncSession, rows: list[ModelRow]
+    ) -> list[ModelRow]:
+        """为模型附加 version_count 与 latest_version_status(供 §2.5 仓库列表卡片)。
+
+        latest = created_at 最大的版本状态;无版本则 0 / None。
+        """
+        ids = [r.id for r in rows]
+        counts: dict[str, int] = {}
+        latest: dict[str, str] = {}
+        if ids:
+            cnt = await session.execute(
+                select(ModelVersionRow.model_id, func.count())
+                .where(ModelVersionRow.model_id.in_(ids))
+                .group_by(ModelVersionRow.model_id)
+            )
+            counts = {mid: n for mid, n in cnt.all()}
+            vrows = (
+                await session.execute(
+                    select(ModelVersionRow)
+                    .where(ModelVersionRow.model_id.in_(ids))
+                    .order_by(ModelVersionRow.created_at)
+                )
+            ).scalars().all()
+            for v in vrows:  # created_at 升序遍历,最后写入者即最新版本
+                latest[v.model_id] = v.status
+        for r in rows:
+            r.version_count = counts.get(r.id, 0)
+            r.latest_version_status = latest.get(r.id)
+        return rows
+
     @staticmethod
     async def create(
         session: AsyncSession,
@@ -36,14 +68,14 @@ class ModelService:
         )
         session.add(row)
         await session.flush()
-        return row
+        return (await ModelService._decorate(session, [row]))[0]
 
     @staticmethod
     async def get(session: AsyncSession, model_id: str) -> ModelRow:
         row = await session.get(ModelRow, model_id)
         if row is None:
             raise NotFoundError("模型")
-        return row
+        return (await ModelService._decorate(session, [row]))[0]
 
     @staticmethod
     async def list(
@@ -57,7 +89,8 @@ class ModelService:
             stmt = stmt.where(ModelRow.task_type == _tt(task_type))
         if q:
             stmt = stmt.where(ModelRow.name.ilike(f"%{q}%"))
-        return list((await session.execute(stmt)).scalars().all())
+        rows = list((await session.execute(stmt)).scalars().all())
+        return await ModelService._decorate(session, rows)
 
     @staticmethod
     async def update(
@@ -75,7 +108,7 @@ class ModelService:
                 value = _tt(value)
             setattr(row, key, value)
         await session.flush()
-        return row
+        return (await ModelService._decorate(session, [row]))[0]
 
     @staticmethod
     async def delete(session: AsyncSession, model_id: str) -> None:
