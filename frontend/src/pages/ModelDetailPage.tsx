@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
-import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 
 import { ApiError, api } from "../api/client";
 import { NewVersionForm } from "../components/NewVersionForm";
@@ -54,10 +53,17 @@ export function ModelDetailPage() {
   }
   if (!model) return null;
 
-  const chartData = compare.map((c) => ({
-    version: c.version,
-    accuracy: c.metrics?.accuracy ?? 0,
-  }));
+  // 版本资源需求摘要(spec 版本列表三要素之一:状态/创建时间/资源需求)。
+  function resourceSummary(rr: Record<string, unknown>): string {
+    const parts: string[] = [];
+    if (rr.cpu != null) parts.push(`${t("quota.cpu")} ${rr.cpu}`);
+    if (rr.memory != null) parts.push(`${t("quota.memory")} ${rr.memory}`);
+    const gpu = rr.gpu_vram ?? rr.gpu;
+    if (gpu != null) parts.push(`${t("quota.gpu")} ${gpu}`);
+    return parts.join(" · ");
+  }
+
+  const fmtMetric = (v: number | null | undefined) => (v == null ? "—" : String(v));
 
   const card = "bg-panel border border-border rounded-[14px]";
 
@@ -121,6 +127,9 @@ export function ModelDetailPage() {
                 >
                   {t(`status.${v.status}`)}
                 </span>
+                <span className="mono text-[11px] text-faint2" title={t("field.resourceReq")}>
+                  {resourceSummary(v.resource_req)}
+                </span>
                 <span className="flex-1" />
                 <span className="text-[11.5px] text-faint">{t(`framework.${v.framework}`)}</span>
                 <span className="mono text-[11px] text-faint2">
@@ -131,16 +140,27 @@ export function ModelDetailPage() {
           </div>
 
           <div className={card} style={{ padding: "16px 18px" }}>
-            <div className="font-extrabold text-sm mb-2.5">
-              {t("version.compare")}（{t("metrics.accuracy")}）
-            </div>
-            <BarChart width={460} height={220} data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="version" stroke="var(--muted)" fontSize={11} />
-              <YAxis stroke="var(--muted)" fontSize={11} />
-              <Tooltip />
-              <Bar dataKey="accuracy" fill="var(--accent)" />
-            </BarChart>
+            <div className="font-extrabold text-sm mb-2.5">{t("version.compare")}</div>
+            <table className="w-full text-[12.5px]" style={{ borderCollapse: "collapse" }}>
+              <thead>
+                <tr className="text-muted font-bold text-left">
+                  <th className="py-1.5 pr-3">{t("version.name")}</th>
+                  <th className="py-1.5 px-3 text-right">{t("metrics.accuracy")}</th>
+                  <th className="py-1.5 px-3 text-right">{t("metrics.latency")}</th>
+                  <th className="py-1.5 pl-3 text-right">{t("metrics.throughput")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {compare.map((c) => (
+                  <tr key={c.version_id} className="border-t border-border-soft">
+                    <td className="py-2 pr-3 mono font-bold">{c.version}</td>
+                    <td className="py-2 px-3 text-right mono">{fmtMetric(c.metrics?.accuracy)}</td>
+                    <td className="py-2 px-3 text-right mono">{fmtMetric(c.metrics?.latency)}</td>
+                    <td className="py-2 pl-3 text-right mono">{fmtMetric(c.metrics?.throughput)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 
