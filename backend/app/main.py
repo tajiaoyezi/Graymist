@@ -16,6 +16,12 @@ from app.common.schema_validation import InvalidSchemaError
 from app.config import settings
 from app.domain.state_machine import InvalidTransitionError
 from app.endpoints.router import router as endpoints_router
+from app.inference.errors import (
+    InferenceInputInvalidError,
+    InferenceTimeoutError,
+    RateLimitedError,
+)
+from app.inference.router import router as inference_router
 from app.models.router import router as models_router
 from app.versions.router import router as versions_router
 
@@ -74,6 +80,18 @@ def create_app() -> FastAPI:
     async def _bad_binding(request: Request, exc: BindingError):
         return JSONResponse(status_code=422, content={"detail": str(exc)})
 
+    @app.exception_handler(RateLimitedError)
+    async def _rate_limited(request: Request, exc: RateLimitedError):
+        return JSONResponse(status_code=429, content={"detail": str(exc)})
+
+    @app.exception_handler(InferenceTimeoutError)
+    async def _infer_timeout(request: Request, exc: InferenceTimeoutError):
+        return JSONResponse(status_code=504, content={"detail": str(exc)})
+
+    @app.exception_handler(InferenceInputInvalidError)
+    async def _infer_input_invalid(request: Request, exc: InferenceInputInvalidError):
+        return JSONResponse(status_code=422, content={"detail": str(exc)})
+
     @app.exception_handler(IntegrityError)
     async def _integrity(request: Request, exc: IntegrityError):
         # 审查 L1:SELECT-查重→INSERT 的并发竞态下唯一约束冲突的兜底,统一 409。
@@ -86,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(models_router)
     app.include_router(versions_router)
     app.include_router(endpoints_router)
+    app.include_router(inference_router)
     return app
 
 

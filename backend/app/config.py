@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # a2 异步部署模拟耗时区间（秒）。测试/E2E 设 0 使其确定收敛。
     deploy_delay_min_seconds: float = 3.0
     deploy_delay_max_seconds: float = 10.0
+    # a3 推理执行模拟耗时区间（秒，原 2.3：100ms~3s）。测试设 0/可注入。
+    infer_latency_min_seconds: float = 0.1
+    infer_latency_max_seconds: float = 3.0
 
 
 settings = Settings()

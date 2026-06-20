@@ -2,8 +2,8 @@
 
 a1：model / model_version / change_log。
 a2：endpoint / endpoint_version_binding（change_log 复用 a1，不改表）。
+a3：inference_log / async_inference_task（推理调用 API，§4.3）。
 JSON 列在 PostgreSQL 用 jsonb、在 SQLite 退化为 JSON（见 _json）。
-InferenceLog/AsyncTask 留待 a3 实现。
 """
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -126,3 +126,36 @@ class ChangeLogRow(Base):
     # D12：v1.5/E7 建立真实身份前记占位标识，历史不回填。
     actor: Mapped[str] = mapped_column(String(64), default="local-admin")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class InferenceLogRow(Base):
+    """推理日志（a3，§4.3 / 原 2.3）。每次调用（成功/超时/错误/429）落一条。"""
+
+    __tablename__ = "inference_log"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    endpoint_id: Mapped[str] = mapped_column(String(32), index=True)
+    # 实际命中版本；429/422 等在选版本前即被拒的调用无命中版本，故可空。
+    version_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    mode: Mapped[str] = mapped_column(String(16))  # sync / async
+    input_summary: Mapped[str] = mapped_column(Text, default="")
+    output_summary: Mapped[str] = mapped_column(Text, default="")
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(32))  # success/timeout/error/rate_limited
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+
+class AsyncInferenceTaskRow(Base):
+    """异步推理任务（a3）。状态机 queued→running→succeeded/failed，独立于版本/端点状态机。"""
+
+    __tablename__ = "async_inference_task"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    endpoint_id: Mapped[str] = mapped_column(String(32), index=True)
+    status: Mapped[str] = mapped_column(String(16), default="queued")
+    input: Mapped[dict] = mapped_column(_json(), default=dict)
+    result: Mapped[dict | None] = mapped_column(_json(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
