@@ -4,12 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ApiError, api } from "../api/client";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EndpointForm } from "../components/EndpointForm";
-import {
-  canRestart,
-  canStart,
-  canStop,
-  isTransitioning,
-} from "../domain/endpointStateMachine";
+import { isTransitioning } from "../domain/endpointStateMachine";
 import type { Endpoint } from "../types";
 
 type DangerOp = "stop" | "restart";
@@ -24,13 +19,20 @@ const STATUS: Record<string, { color: string; bg: string }> = {
 export function DeploymentConsolePage() {
   const { t } = useTranslation();
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(""); // 加载错误(首次失败 → 整页错误态)
+  // 操作错误(启动/停止/重启,如资源超额 409)单列:由用户操作产生,持久展示,
+  // 不被每 600ms 轮询的 load() 清空(否则会一闪而过)。
+  const [actionError, setActionError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Endpoint | null>(null);
   const [confirm, setConfirm] = useState<{ id: string; op: DangerOp; message: string } | null>(
     null,
   );
+  // ⋮ 行菜单:记录展开的端点 id 与浮层锚点坐标(避开表格 overflow 裁剪,用 fixed 定位)。
+  const [menu, setMenu] = useState<{ id: string; top: number; right: number } | null>(null);
+  // 停止为异步(后端暂仍 running,后台才转 stopped),前端记「停止中」端点 → 禁用主按钮 + 状态提示。
+  const [stopping, setStopping] = useState<Record<string, boolean>>({});
 
   const alive = useRef(true);
 
@@ -40,6 +42,15 @@ export function DeploymentConsolePage() {
       if (!alive.current) return;
       setError("");
       setEndpoints(data);
+      // 停止完成(状态已非 running)或端点消失 → 清除「停止中」标记。
+      setStopping((prev) => {
+        const runningIds = new Set(
+          data.filter((e) => e.status === "running").map((e) => e.id),
+        );
+        const next: Record<string, boolean> = {};
+        for (const id of Object.keys(prev)) if (runningIds.has(id)) next[id] = true;
+        return next;
+      });
       setLoaded(true);
     } catch (e) {
       if (!alive.current) return;
@@ -59,13 +70,17 @@ export function DeploymentConsolePage() {
 
   async function act(id: string, op: "start" | DangerOp) {
     try {
-      setError("");
+      setActionError("");
       if (op === "start") await api.startEndpoint(id);
-      else if (op === "stop") await api.stopEndpoint(id);
-      else await api.restartEndpoint(id);
+      else if (op === "stop") {
+        await api.stopEndpoint(id);
+        // 后端停止异步:立即标记「停止中」,后续轮询见非 running 再由 load 清除。
+        setStopping((s) => ({ ...s, [id]: true }));
+      } else await api.restartEndpoint(id);
       await load();
     } catch (e) {
-      setError(e instanceof ApiError ? e.detail : t("error.action"));
+      // 用 actionError(非 error),否则会被轮询 load 的 setError("") 清掉而一闪而过。
+      setActionError(e instanceof ApiError ? e.detail : t("error.action"));
     }
   }
 
@@ -86,8 +101,29 @@ export function DeploymentConsolePage() {
   }
 
   const card = "bg-panel border border-border rounded-[14px]";
-  const opBtn =
-    "border border-border rounded-lg px-2.5 py-1 text-xs font-bold text-text2 bg-panel hover:bg-surface disabled:opacity-40";
+
+  // 行操作:启停合一为主按钮(按状态三选一),其余收进 ⋮ 菜单。
+  const primaryFor = (ep: Endpoint) => {
+    if (ep.status === "stopped")
+      return { op: "start" as const, label: t("action.start"), danger: false, disabled: false, run: () => void act(ep.id, "start") };
+    if (ep.status === "failed")
+      return { op: "restart" as const, label: t("action.restart"), danger: true, disabled: false, run: () => requestDanger(ep.id, "restart") };
+    // 部署中:异步过渡态,主按钮禁用展示「部署中…」(与「停止中」一致,进行中不可操作)
+    if (ep.status === "creating")
+      return { op: "deploying" as const, label: t("endpoint.creatingMsg"), danger: false, disabled: true, run: () => {} };
+    // 停止中:running 但已发起停止 → 禁用「停止中…」防重复点击(后端停止异步、状态暂仍 running)
+    if (stopping[ep.id])
+      return { op: "stop" as const, label: t("endpoint.stopping"), danger: true, disabled: true, run: () => {} };
+    // running → 停止
+    return { op: "stop" as const, label: t("action.stop"), danger: true, disabled: false, run: () => requestDanger(ep.id, "stop") };
+  };
+  // 菜单项:重启(running/stopped;failed 时重启已是主按钮)+ 编辑(creating 禁用)。
+  const menuFor = (ep: Endpoint) => [
+    ...(ep.status === "running" || ep.status === "stopped"
+      ? [{ op: "restart", label: t("action.restart"), danger: true, disabled: false, run: () => requestDanger(ep.id, "restart") }]
+      : []),
+    { op: "edit", label: t("action.edit"), danger: false, disabled: isTransitioning(ep.status), run: () => setEditing(ep) },
+  ];
 
   return (
     <div className="space-y-4">
@@ -112,9 +148,29 @@ export function DeploymentConsolePage() {
         </button>
       </div>
 
-      {error && (
-        <div data-testid="action-error" className="text-danger text-sm">
-          {error}
+      {actionError && (
+        <div
+          data-testid="action-error"
+          className="flex items-start gap-2.5 rounded-[10px] px-3.5 py-2.5 text-[13px]"
+          style={{
+            background: "var(--danger-soft)",
+            border: "1px solid color-mix(in srgb, var(--danger) 35%, transparent)",
+            color: "var(--danger)",
+          }}
+        >
+          <span aria-hidden className="font-extrabold leading-none mt-0.5">
+            !
+          </span>
+          <span className="flex-1 font-bold leading-snug">{actionError}</span>
+          <button
+            type="button"
+            data-testid="action-error-dismiss"
+            aria-label={t("action.cancel")}
+            onClick={() => setActionError("")}
+            className="font-extrabold leading-none opacity-70 hover:opacity-100"
+          >
+            ×
+          </button>
         </div>
       )}
 
@@ -162,6 +218,14 @@ export function DeploymentConsolePage() {
                             {t("endpoint.creatingMsg")}
                           </div>
                         )}
+                        {ep.status === "running" && stopping[ep.id] && (
+                          <div
+                            data-testid={`stopping-${ep.id}`}
+                            className="text-[10px] mt-1 animate-pulse text-faint"
+                          >
+                            {t("endpoint.stopping")}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3.5 py-3 mono text-[11px]" style={{ color: "#7c3aed" }}>
                         {ep.bindings.map((b) => `${b.model_version_id}:${b.weight}%`).join("  ")}
@@ -172,43 +236,47 @@ export function DeploymentConsolePage() {
                         {t("quota.gpu")} {ep.resource_quota.gpu}
                       </td>
                       <td className="px-[18px] py-3">
-                        <div className="flex gap-2 justify-end">
-                          <button
-                            type="button"
-                            data-testid={`edit-${ep.id}`}
-                            disabled={isTransitioning(ep.status)}
-                            onClick={() => setEditing(ep)}
-                            className={opBtn}
-                          >
-                            {t("action.edit")}
-                          </button>
-                          <button
-                            type="button"
-                            data-testid={`start-${ep.id}`}
-                            disabled={!canStart(ep.status)}
-                            onClick={() => void act(ep.id, "start")}
-                            className={opBtn}
-                          >
-                            {t("action.start")}
-                          </button>
-                          <button
-                            type="button"
-                            data-testid={`stop-${ep.id}`}
-                            disabled={!canStop(ep.status)}
-                            onClick={() => requestDanger(ep.id, "stop")}
-                            className={opBtn}
-                          >
-                            {t("action.stop")}
-                          </button>
-                          <button
-                            type="button"
-                            data-testid={`restart-${ep.id}`}
-                            disabled={!canRestart(ep.status)}
-                            onClick={() => requestDanger(ep.id, "restart")}
-                            className={opBtn}
-                          >
-                            {t("action.restart")}
-                          </button>
+                        <div className="flex justify-end">
+                          {(() => {
+                            const p = primaryFor(ep);
+                            const hasMenu = menuFor(ep).some((it) => !it.disabled);
+                            // 分段按钮:主操作 + ▾ 触发器合为一体,同色整体、中间分隔线。
+                            return (
+                              <div
+                                className="inline-flex items-stretch rounded-lg overflow-hidden"
+                                style={{ background: p.danger ? "var(--danger)" : "var(--accent)" }}
+                              >
+                                <button
+                                  type="button"
+                                  data-testid={`${p.op}-${ep.id}`}
+                                  disabled={p.disabled}
+                                  onClick={p.run}
+                                  className="px-3 h-[30px] text-white font-bold text-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                  {p.label}
+                                </button>
+                                {hasMenu && (
+                                  <button
+                                    type="button"
+                                    data-testid={`more-${ep.id}`}
+                                    aria-label={t("endpoint.colOps")}
+                                    disabled={p.disabled}
+                                    onClick={(e) => {
+                                      const r = e.currentTarget.getBoundingClientRect();
+                                      setMenu(
+                                        menu?.id === ep.id
+                                          ? null
+                                          : { id: ep.id, top: r.bottom + 4, right: window.innerWidth - r.right },
+                                      );
+                                    }}
+                                    className="px-2 h-[30px] inline-flex items-center justify-center text-white text-[10px] border-l border-white/25 hover:bg-black/10 transition disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                                  >
+                                    {menu?.id === ep.id ? "▴" : "▾"}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </td>
                     </tr>
@@ -219,6 +287,51 @@ export function DeploymentConsolePage() {
           </div>
         </div>
       )}
+
+      {menu &&
+        (() => {
+          const ep = endpoints.find((e) => e.id === menu.id);
+          if (!ep) return null; // 端点被轮询移除 → 菜单自动关闭
+          if (primaryFor(ep).disabled) return null; // 进行中(停止中/部署中)→ 不展示菜单
+          return (
+            <>
+              <div
+                className="fixed inset-0"
+                style={{ zIndex: 80 }}
+                onClick={() => setMenu(null)}
+              />
+              <div
+                data-testid={`menu-${ep.id}`}
+                className="fixed bg-panel border border-border rounded-[10px] py-1"
+                style={{
+                  top: menu.top,
+                  right: menu.right,
+                  zIndex: 81,
+                  minWidth: 124,
+                  boxShadow: "0 12px 30px rgba(15,23,42,.18)",
+                }}
+              >
+                {menuFor(ep).map((it) => (
+                  <button
+                    key={it.op}
+                    type="button"
+                    data-testid={`${it.op}-${ep.id}`}
+                    disabled={it.disabled}
+                    onClick={() => {
+                      setMenu(null);
+                      it.run();
+                    }}
+                    className={`block w-full text-left px-3.5 py-1.5 text-xs font-bold hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed ${
+                      it.danger ? "text-danger" : "text-text2"
+                    }`}
+                  >
+                    {it.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          );
+        })()}
 
       {/* 创建 / 编辑端点弹窗 */}
       {(modalOpen || editing) && (
