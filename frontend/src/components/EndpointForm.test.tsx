@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 function readyV(id: string, version: string) {
   return {
@@ -52,6 +52,11 @@ vi.mock("../api/client", async (importActual) => {
 import { api } from "../api/client";
 import { EndpointForm } from "./EndpointForm";
 
+// mock 调用计数按用例隔离(clearAllMocks 保留 mockResolvedValue 实现)。
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
 describe("EndpointForm 编辑模式", () => {
   it("预填配置、name/url 只读,提交走 updateEndpoint(仅可改字段)", async () => {
     render(<EndpointForm endpoint={endpoint as never} onSuccess={() => {}} />);
@@ -67,6 +72,10 @@ describe("EndpointForm 编辑模式", () => {
     await waitFor(() => expect(screen.getByTestId("weight-input-v1")).toBeInTheDocument());
 
     fireEvent.click(screen.getByTestId("submit-endpoint"));
+    // 运行中端点 → 先二次确认,确认前不提交
+    expect(await screen.findByTestId("confirm-dialog")).toBeInTheDocument();
+    expect(api.updateEndpoint).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("confirm-yes"));
     await waitFor(() =>
       expect(api.updateEndpoint).toHaveBeenCalledWith(
         "e1",
@@ -80,5 +89,55 @@ describe("EndpointForm 编辑模式", () => {
       ),
     );
     expect(api.createEndpoint).not.toHaveBeenCalled(); // 编辑不应走创建
+  });
+});
+
+describe("EndpointForm 编辑在线端点警告", () => {
+  it("编辑运行中端点 → 显示线上影响警告", async () => {
+    render(<EndpointForm endpoint={endpoint as never} onSuccess={() => {}} />);
+    expect(await screen.findByTestId("edit-running-warn")).toBeInTheDocument();
+  });
+
+  it("编辑已停止端点 → 不显示警告(不在线,无线上影响)", async () => {
+    render(
+      <EndpointForm
+        endpoint={{ ...endpoint, status: "stopped" } as never}
+        onSuccess={() => {}}
+      />,
+    );
+    expect(await screen.findByTestId("ep-model")).toBeInTheDocument();
+    expect(screen.queryByTestId("edit-running-warn")).toBeNull();
+  });
+
+  it("新建端点 → 不显示警告", async () => {
+    render(<EndpointForm onSuccess={() => {}} />);
+    expect(await screen.findByTestId("ep-model")).toBeInTheDocument();
+    expect(screen.queryByTestId("edit-running-warn")).toBeNull();
+  });
+
+  it("运行中端点保存 → 弹二次确认,取消则不提交", async () => {
+    render(<EndpointForm endpoint={endpoint as never} onSuccess={() => {}} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("weight-input-v1")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("submit-endpoint"));
+    fireEvent.click(await screen.findByTestId("confirm-no"));
+    expect(api.updateEndpoint).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("confirm-dialog")).toBeNull();
+  });
+
+  it("已停止端点保存 → 直接提交,无需二次确认", async () => {
+    render(
+      <EndpointForm
+        endpoint={{ ...endpoint, status: "stopped" } as never}
+        onSuccess={() => {}}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("weight-input-v1")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByTestId("submit-endpoint"));
+    await waitFor(() => expect(api.updateEndpoint).toHaveBeenCalled());
+    expect(screen.queryByTestId("confirm-dialog")).toBeNull();
   });
 });

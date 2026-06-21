@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { ApiError, api } from "../api/client";
 import { AbWeightEditor, type WeightBinding } from "./AbWeightEditor";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { QuotaUsage } from "./QuotaUsage";
 import { weightsValid } from "../domain/endpointStateMachine";
 import type { Endpoint, Model, QuotaInfo, ResourceQuota, Version } from "../types";
@@ -11,6 +12,12 @@ const EMPTY_QUOTA: QuotaInfo = {
   total: { cpu: 0, memory: 0, gpu: 0 },
   used: { cpu: 0, memory: 0, gpu: 0 },
   remaining: { cpu: 0, memory: 0, gpu: 0 },
+};
+
+// 数值输入用 string 状态,允许「清空再输入」的中间态;计算/提交时归一为数字(空→0)。
+const toNum = (s: string) => {
+  const v = Number(s);
+  return Number.isFinite(v) ? v : 0;
 };
 
 // 创建/编辑端点表单(供控制台弹窗与独立页包装复用)。保留全部 testid 与校验行为。
@@ -32,14 +39,15 @@ export function EndpointForm({
   const [bindings, setBindings] = useState<WeightBinding[]>([]);
   const [name, setName] = useState(endpoint?.name ?? "");
   const [urlPath, setUrlPath] = useState(endpoint?.url_path ?? "");
-  const [replicas, setReplicas] = useState(endpoint?.replicas ?? 1);
-  const [cpu, setCpu] = useState(endpoint?.resource_quota.cpu ?? 1);
-  const [memory, setMemory] = useState(endpoint?.resource_quota.memory ?? 100);
-  const [gpu, setGpu] = useState(endpoint?.resource_quota.gpu ?? 0);
-  const [timeoutMs, setTimeoutMs] = useState(endpoint?.timeout_ms ?? 30000);
-  const [maxConc, setMaxConc] = useState(endpoint?.max_concurrency ?? 4);
+  const [replicas, setReplicas] = useState(String(endpoint?.replicas ?? 1));
+  const [cpu, setCpu] = useState(String(endpoint?.resource_quota.cpu ?? 1));
+  const [memory, setMemory] = useState(String(endpoint?.resource_quota.memory ?? 100));
+  const [gpu, setGpu] = useState(String(endpoint?.resource_quota.gpu ?? 0));
+  const [timeoutMs, setTimeoutMs] = useState(String(endpoint?.timeout_ms ?? 30000));
+  const [maxConc, setMaxConc] = useState(String(endpoint?.max_concurrency ?? 4));
   const [quota, setQuota] = useState<QuotaInfo>(EMPTY_QUOTA);
   const [error, setError] = useState("");
+  const [confirmSave, setConfirmSave] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -97,7 +105,11 @@ export function EndpointForm({
   }
 
   const pending = useMemo(
-    () => ({ cpu: replicas * cpu, memory: replicas * memory, gpu: replicas * gpu }),
+    () => ({
+      cpu: toNum(replicas) * toNum(cpu),
+      memory: toNum(replicas) * toNum(memory),
+      gpu: toNum(replicas) * toNum(gpu),
+    }),
     [replicas, cpu, memory, gpu],
   );
   // 编辑在线端点时,后端配额校验排除该端点自身占用(_active_usages exclude_id);
@@ -132,39 +144,32 @@ export function EndpointForm({
     urlPath.length > 0 &&
     bindings.length > 0 &&
     weightsValid(bindings.map((b) => b.weight)) &&
-    replicas >= 1 &&
-    maxConc >= 1 &&
-    cpu >= 0 &&
-    memory >= 0 &&
-    gpu >= 0 &&
+    toNum(replicas) >= 1 &&
+    toNum(maxConc) >= 1 &&
+    toNum(cpu) >= 0 &&
+    toNum(memory) >= 0 &&
+    toNum(gpu) >= 0 &&
     !over;
 
-  async function submit() {
+  async function doSubmit() {
     const mappedBindings = bindings.map((b) => ({
       model_version_id: b.model_version_id,
       weight: b.weight,
     }));
+    const cfg = {
+      replicas: toNum(replicas),
+      resource_quota: { cpu: toNum(cpu), memory: toNum(memory), gpu: toNum(gpu) },
+      timeout_ms: toNum(timeoutMs),
+      max_concurrency: toNum(maxConc),
+      bindings: mappedBindings,
+    };
     try {
       setError("");
       if (endpoint) {
         // 编辑:仅提交后端可改字段(name/url_path 不可变);权重整体替换由后端原子完成。
-        await api.updateEndpoint(endpoint.id, {
-          replicas,
-          resource_quota: { cpu, memory, gpu },
-          timeout_ms: timeoutMs,
-          max_concurrency: maxConc,
-          bindings: mappedBindings,
-        });
+        await api.updateEndpoint(endpoint.id, cfg);
       } else {
-        await api.createEndpoint({
-          name,
-          url_path: urlPath,
-          replicas,
-          resource_quota: { cpu, memory, gpu },
-          timeout_ms: timeoutMs,
-          max_concurrency: maxConc,
-          bindings: mappedBindings,
-        });
+        await api.createEndpoint({ name, url_path: urlPath, ...cfg });
       }
       onSuccess();
     } catch (e) {
@@ -176,14 +181,14 @@ export function EndpointForm({
     "border border-border rounded-[9px] px-3 h-[38px] w-full bg-panel text-sm outline-none mono";
   const labelCls = "text-xs font-bold text-muted mb-1.5 block";
 
-  const numField = (id: string, value: number, set: (n: number) => void, label: string) => (
+  const numField = (id: string, value: string, set: (s: string) => void, label: string) => (
     <div>
       <div className="text-[11px] text-faint mb-1">{label}</div>
       <input
         type="number"
         data-testid={id}
         value={value}
-        onChange={(e) => set(parseInt(e.target.value, 10) || 0)}
+        onChange={(e) => set(e.target.value)}
         className="border border-border rounded-lg px-3 h-9 w-full bg-panel text-sm outline-none mono"
       />
     </div>
@@ -194,12 +199,35 @@ export function EndpointForm({
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
-        void submit();
+        // 编辑运行中端点 → 二次确认(改动会影响线上);其余直接提交。
+        if (isEdit && endpoint?.status === "running") {
+          setConfirmSave(true);
+        } else {
+          void doSubmit();
+        }
       }}
     >
       {error && (
         <div data-testid="form-error" className="text-danger text-sm">
           {error}
+        </div>
+      )}
+
+      {/* 编辑「运行中」端点 = 改动线上配置,显式警告其影响(可能触发重新部署)。 */}
+      {isEdit && endpoint?.status === "running" && (
+        <div
+          data-testid="edit-running-warn"
+          className="flex items-start gap-2 text-[12.5px] rounded-[10px] px-3 py-2.5"
+          style={{
+            color: "#d97706",
+            background: "color-mix(in srgb, #d97706 12%, transparent)",
+            border: "1px solid color-mix(in srgb, #d97706 32%, transparent)",
+          }}
+        >
+          <span aria-hidden className="font-extrabold leading-none mt-0.5">
+            !
+          </span>
+          <span>{t("endpoint.editRunningWarn")}</span>
         </div>
       )}
 
@@ -246,18 +274,49 @@ export function EndpointForm({
       {versions.length > 0 && (
         <fieldset className="border-0 p-0 m-0">
           <legend className={labelCls}>{t("endpoint.selectVersions")}</legend>
-          <div className="flex flex-wrap gap-3">
-            {versions.map((v) => (
-              <label key={v.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  data-testid={`version-${v.id}`}
-                  checked={bindings.some((b) => b.model_version_id === v.id)}
-                  onChange={(e) => toggleVersion(v, e.target.checked)}
-                />
-                <span className="mono">{v.version}</span>
-              </label>
-            ))}
+          <div className="flex flex-wrap gap-2.5">
+            {versions.map((v) => {
+              const checked = bindings.some((b) => b.model_version_id === v.id);
+              return (
+                <label
+                  key={v.id}
+                  className={`flex items-center gap-2.5 cursor-pointer select-none rounded-[10px] border px-3 h-[44px] transition ${
+                    checked
+                      ? "border-accent bg-accent-soft"
+                      : "border-border bg-panel hover:border-muted"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    data-testid={`version-${v.id}`}
+                    checked={checked}
+                    onChange={(e) => toggleVersion(v, e.target.checked)}
+                    className="sr-only"
+                  />
+                  {/* 选中指示方块:选中填 accent + ✓,未选仅留边框 */}
+                  <span
+                    aria-hidden
+                    className={`flex items-center justify-center w-[18px] h-[18px] rounded-[5px] border text-[11px] font-extrabold leading-none ${
+                      checked
+                        ? "text-white border-transparent"
+                        : "border-border text-transparent"
+                    }`}
+                    style={checked ? { background: "var(--accent)" } : undefined}
+                  >
+                    ✓
+                  </span>
+                  <span className="mono text-[13px] font-bold text-text leading-none">
+                    {v.version}
+                  </span>
+                  <span className="text-[11px] text-faint leading-none">
+                    {t(`framework.${v.framework}`)}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="text-[11px] text-faint mt-2">
+            {t("endpoint.selectVersionsHint")}
           </div>
         </fieldset>
       )}
@@ -305,6 +364,18 @@ export function EndpointForm({
           {isEdit ? t("action.save") : t("endpoint.deploy")}
         </button>
       </div>
+
+      <ConfirmDialog
+        open={confirmSave}
+        title={t("endpoint.confirmEditRunningTitle")}
+        message={t("endpoint.editRunningWarn")}
+        confirmLabel={t("action.save")}
+        onConfirm={() => {
+          setConfirmSave(false);
+          void doSubmit();
+        }}
+        onCancel={() => setConfirmSave(false)}
+      />
     </form>
   );
 }

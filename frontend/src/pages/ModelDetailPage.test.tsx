@@ -137,6 +137,45 @@ describe("ModelDetailPage 新手引导", () => {
   });
 });
 
+describe("ModelDetailPage 新建版本(选填指标)", () => {
+  it("填了准确率 → createVersion 带上 metrics(空项为 null)", async () => {
+    vi.mocked(api.createVersion).mockResolvedValue({} as never);
+    renderPage();
+    // 打开新建版本弹窗(取页头按钮,空态按钮文案相同)
+    await userEvent.click(
+      (await screen.findAllByRole("button", { name: /新建版本/ }))[0],
+    );
+    await userEvent.type(screen.getByTestId("nv-version"), "v1.0.0");
+    await userEvent.type(screen.getByTestId("nv-accuracy"), "0.9");
+    await userEvent.click(screen.getByTestId("nv-submit"));
+
+    await waitFor(() =>
+      expect(api.createVersion).toHaveBeenCalledWith(
+        "m1",
+        expect.objectContaining({
+          version: "v1.0.0",
+          metrics: { accuracy: 0.9, latency: null, throughput: null },
+        }),
+      ),
+    );
+  });
+
+  it("三项指标全空 → createVersion 不带 metrics", async () => {
+    vi.mocked(api.createVersion).mockResolvedValue({} as never);
+    renderPage();
+    await userEvent.click(
+      (await screen.findAllByRole("button", { name: /新建版本/ }))[0],
+    );
+    await userEvent.type(screen.getByTestId("nv-version"), "v2.0.0");
+    await userEvent.click(screen.getByTestId("nv-submit"));
+
+    await waitFor(() => expect(api.createVersion).toHaveBeenCalled());
+    expect(vi.mocked(api.createVersion).mock.calls[0][1]).not.toHaveProperty(
+      "metrics",
+    );
+  });
+});
+
 describe("ModelDetailPage 端点关系/删除守卫", () => {
   it("未被绑定 → 显示「未部署」,删除按钮可用", async () => {
     renderPage();

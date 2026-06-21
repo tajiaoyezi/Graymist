@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ApiError } from "../api/client";
-import type { Framework } from "../types";
+import type { Framework, VersionMetrics } from "../types";
 
 export interface NewVersionInput {
   version: string;
@@ -11,6 +11,7 @@ export interface NewVersionInput {
   framework: Framework;
   resource_req: Record<string, unknown>;
   change_note: string;
+  metrics?: VersionMetrics; // 选填;三项全空则不带,版本 metrics 保持 null
 }
 
 const FRAMEWORKS: Framework[] = ["PyTorch", "ONNX", "TensorRT"];
@@ -34,12 +35,22 @@ export function NewVersionForm({
   const [memory, setMemory] = useState("1024");
   const [gpuVram, setGpuVram] = useState("0");
   const [changeNote, setChangeNote] = useState("");
+  // 性能指标(选填):三项全空则创建时不带,版本 metrics 保持 null。
+  const [acc, setAcc] = useState("");
+  const [lat, setLat] = useState("");
+  const [thr, setThr] = useState("");
   const [error, setError] = useState("");
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
     try {
+      const num = (s: string) => {
+        const n = Number(s);
+        return s.trim() === "" || !Number.isFinite(n) ? null : n;
+      };
+      const anyMetric =
+        acc.trim() !== "" || lat.trim() !== "" || thr.trim() !== "";
       await onSubmit({
         version,
         file_path: filePath,
@@ -50,6 +61,15 @@ export function NewVersionForm({
           gpu_vram: Number(gpuVram) || 0,
         },
         change_note: changeNote,
+        ...(anyMetric
+          ? {
+              metrics: {
+                accuracy: num(acc),
+                latency: num(lat),
+                throughput: num(thr),
+              },
+            }
+          : {}),
       });
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : String(err));
@@ -61,12 +81,14 @@ export function NewVersionForm({
     label: string,
     value: string,
     setValue: (v: string) => void,
+    step?: string, // 指标允许小数(step="any");资源框不传 → 默认整数步进
   ) => (
     <label className="block">
       <span className="text-[11px] text-faint">{label}</span>
       <input
         type="number"
         min={0}
+        step={step}
         data-testid={testid}
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -140,6 +162,16 @@ export function NewVersionForm({
           className={INPUT}
         />
       </label>
+      <div>
+        <div className="text-[11px] font-bold text-muted mb-1">
+          {t("field.metricsOptional")}
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {numField("nv-accuracy", t("metrics.accuracy"), acc, setAcc, "any")}
+          {numField("nv-latency", t("metrics.latency"), lat, setLat, "any")}
+          {numField("nv-throughput", t("metrics.throughput"), thr, setThr, "any")}
+        </div>
+      </div>
       {error && (
         <div data-testid="nv-error" className="text-danger text-sm">
           {error}
