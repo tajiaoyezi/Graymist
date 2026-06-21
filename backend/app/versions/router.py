@@ -57,3 +57,8 @@ async def set_metrics(
     return await VersionService.set_metrics(
         session, version_id=version_id, metrics=payload.model_dump()
     )
+
+
+@router.delete("/versions/{version_id}", status_code=204)
+async def delete_version(version_id: str, session: AsyncSession = Depends(get_session)):
+    await VersionService.delete(session, version_id)

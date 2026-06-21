@@ -5,8 +5,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common import change_log
-from app.common.errors import NotFoundError
-from app.db.tables import ModelVersionRow
+from app.common.errors import ConflictError, NotFoundError
+from app.db.tables import EndpointRow, EndpointVersionBindingRow, ModelVersionRow
 from app.domain.enums import Framework, VersionStatus
 from app.domain.state_machine import assert_transition
 from app.models.service import ModelService
@@ -97,6 +97,29 @@ class VersionService:
         row.metrics = metrics
         await session.flush()
         return row
+
+    @staticmethod
+    async def delete(session: AsyncSession, version_id: str) -> None:
+        row = await VersionService.get(session, version_id)  # 不存在 → 404
+        # 守卫:被任一端点绑定则拒绝删除(避免孤儿化绑定),与版本状态无关;点名冲突端点。
+        names = (
+            await session.execute(
+                select(EndpointRow.name)
+                .join(
+                    EndpointVersionBindingRow,
+                    EndpointVersionBindingRow.endpoint_id == EndpointRow.id,
+                )
+                .where(EndpointVersionBindingRow.model_version_id == version_id)
+                .distinct()
+            )
+        ).scalars().all()
+        if names:
+            joined = "、".join(f"「{n}」" for n in names)
+            raise ConflictError(
+                f"版本被端点{joined}绑定，无法删除；请先在管控台将这些端点改绑到其它版本"
+            )
+        await session.delete(row)
+        await session.flush()
 
     @staticmethod
     async def compare(session: AsyncSession, model_id: str) -> list[dict]:
