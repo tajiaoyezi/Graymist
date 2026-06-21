@@ -18,7 +18,7 @@
 
 ### Requirement: 上游凭证解密注入与优先级
 
-平台 SHALL 在 external-api **真实**推理(`upstream_mock=false`)时解析上游鉴权,优先级为:**版本存储的加密 key(解密)> `auth_ref` 指向的环境变量 > 无**;二者皆无则不注入鉴权头(请求照发,由上游决定是否 401)。注入方式按协议派发(OpenAI=`Authorization: Bearer`;Anthropic=`x-api-key`)。`upstream_mock=true` 时平台 MUST NOT 解密或注入真密钥。
+平台 SHALL 在 external-api **真实**推理(`upstream_mock=false`)时解析上游鉴权,优先级为:**版本存储的加密 key(解密)> `auth_ref` 指向的环境变量 > 无**;二者皆无则不注入鉴权头(请求照发,由上游决定是否 401)。注入方式按协议派发(OpenAI=`Authorization: Bearer`;Anthropic=`x-api-key`)。`upstream_mock=true` 时平台 MUST NOT 解密或注入真密钥。版本存储的加密 key **解密失败**(主密钥丢失/被换)时,平台 MUST 跳过注入(不回退到 `auth_ref`),使上游 401 暴露「凭证不可解」问题,且 MUST NOT 因解密失败崩溃。
 
 #### Scenario: 存储 key 优先于环境变量
 - **WHEN** 某版本同时有加密 key 与 `auth_ref`,且为真实推理
@@ -27,6 +27,10 @@
 #### Scenario: 回退到环境变量
 - **WHEN** 某版本无加密 key 但有 `auth_ref` 且该环境变量存在,且为真实推理
 - **THEN** 平台用该环境变量值注入鉴权头
+
+#### Scenario: 解密失败不回退、不崩溃
+- **WHEN** 某版本存储的加密 key 因主密钥被换/损坏而解密失败(即便同时配了 `auth_ref`)
+- **THEN** 平台跳过注入(不回退到 `auth_ref` env)、不崩溃,请求照发由上游 401 暴露问题
 
 #### Scenario: mock 上游不注入真密钥
 - **WHEN** `upstream_mock=true`

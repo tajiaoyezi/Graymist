@@ -26,7 +26,7 @@
 
 - [x] 6.1 先更新 `NewVersionForm.test.tsx`:external-api 填 API Key → 提交载荷含 `api_key`(password 输入);不填则不带 `api_key`(回归)
 - [x] 6.2 `components/NewVersionForm.tsx` 加 password「API Key(可选)」输入(`nv-api-key`)+ 提交透传;`types.ts` 增只写 `api_key?` 入参与 `has_api_key?` 出参
-- [x] 6.3 版本详情显示「已配置密钥/未配置」徽标(读 `has_api_key`,**不显示**任何明文);`i18n/locales/zh.ts` 补 `field.apiKey`/`field.apiKeyHint`/「已配置」文案,无硬编码、取语义令牌
+- [x] 6.3 模型详情版本列表行显示「已配置密钥」徽标(`has_api_key=true` 时;未配置不标,**不显示**任何明文);`i18n/locales/zh.ts` 补 `field.apiKey`/`field.apiKeyHint`(含 mock 提示)/「已配置」文案,无硬编码、取语义令牌
 
 ## 7. 校验与收尾
 
@@ -34,4 +34,4 @@
 - [x] 7.2 前端 `tsc --noEmit` 无错、`vitest` 全绿
 - [x] 7.3 `openspec validate a7-southbound-credential-store --strict` 通过;确认未超纲(无北向鉴权/独立凭证实体/KMS/审计)
 - [x] 7.4 E2E 冒烟(配 `GRAYMIST_SECRET_KEY`,`upstream_mock=true`):UI 填 key 建 external 版本 → `has_api_key=true` 且响应无明文/密文;轮换/清除生效;mock 路径端到端成功(无真 key 不打公网)
-- [ ] 7.5 sync/archive 时把 `southbound-credentials`(新 capability,ADDED)并入主规格、`web-ui`「external-api 版本注册」MODIFIED 并入(**依赖 a6:应在 a6 sync/archive 之后**,避免覆盖 a6 的 protocol 改动)
+- [x] 7.5 sync/archive 时把 `southbound-credentials`(新 capability,ADDED)、`web-ui`「external-api 版本注册」MODIFIED、`inference-api`(external-api 来源真实推理 / canonical 内核与南向协议适配器 —— 改密钥来源优先级)MODIFIED 并入主规格(**依赖 a6:应在 a6 sync/archive 之后**,避免覆盖 a6 的 protocol/Anthropic 改动)

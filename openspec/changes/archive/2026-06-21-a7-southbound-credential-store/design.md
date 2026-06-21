@@ -33,9 +33,9 @@ a5/a6 的上游凭证是「引用」式:版本存 `auth_ref`(环境变量名),`e
 ### D4：鉴权解析优先级(`external._auth_headers`)
 真实推理(`upstream_mock=false`)时:`auth_secret_enc` 有 → `decrypt_secret` 得 key;否则 `auth_ref` 有 → `os.environ.get`;否则不注入。拿到 key 后 `{**headers, **adapter.auth_headers(key)}`(协议派发不变)。`upstream_mock=true` 仍最先短路、不碰密钥。
 
-### D5：未配主密钥 / 解密失败的处置
-- 保存路径:未配 `GRAYMIST_SECRET_KEY` 而带 `api_key` → `SecretKeyNotConfiguredError` → 400,不落明文(创建整体失败)。
-- 推理路径:`auth_secret_enc` 存在但解密失败(主密钥丢失/被换)→ 记一条 warning、**不注入**该 key(请求照发 → 上游 401 使问题可见),不因解密失败崩 500。该取舍记入 Open Questions。
+### D5：未配/非法主密钥 与 解密失败的处置
+- 保存路径:`GRAYMIST_SECRET_KEY` 未配置(空)**或非法**(非 Fernet key)而带 `api_key` → `_fernet()` 统一抛 `SecretKeyNotConfiguredError` → 400,不落明文(创建/轮换整体失败,发生在写库前)。
+- 推理路径:`auth_secret_enc` 存在但解密失败(主密钥丢失/被换/非法)→ 记一条 warning、`_resolve_key` **`return None`**:**不**回退到 `auth_ref` env、不注入任何 key,请求照发 → 上游 401 使「存储凭证不可解」可见,不因解密失败崩 500(对齐下文优先级语义,避免静默用回退凭证掩盖问题)。
 
 ### D6：迁移与依赖
 新增 Alembic `0006_auth_secret.py`(`down_revision=0005`,`add_column model_version.auth_secret_enc` 可空 / 对称 drop),沿用 0001–0005 先例;`dev.db` 跑 `0006` 加列保数据;测试/CI `create_all` 自带。`cryptography` 进 `pyproject.toml` 运行时依赖。测试用固定 `GRAYMIST_SECRET_KEY`(monkeypatch `settings.secret_key`)做加解密 round-trip 与注入断言。
@@ -54,5 +54,5 @@ a5/a6 的上游凭证是「引用」式:版本存 `auth_ref`(环境变量名),`e
 
 ## Open Questions
 
-- 解密失败(主密钥被换/损坏)当前取「跳过注入 + warning」;是否升级为显式 412/500 提示「凭证不可解,请重填」留待真上游联调期定。
+- 解密失败(主密钥被换/损坏)当前取「`_resolve_key` return None 跳过注入 + warning,不回退 auth_ref」,让上游 401 暴露问题;是否进一步升级为显式 412/500「凭证不可解,请重填」留待真上游联调期定。
 - 独立 Credential 实体 + 跨版本/跨端点复用、主密钥轮换重加密 → 后续 change。
