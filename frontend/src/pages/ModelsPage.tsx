@@ -1,11 +1,10 @@
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import { ModelList } from "../components/ModelList";
 
 export function ModelsPage() {
-  const navigate = useNavigate();
   const { t } = useTranslation();
   return (
     <div className="space-y-4">
@@ -28,7 +27,7 @@ export function ModelsPage() {
           + {t("nav.create")}
         </Link>
       </div>
-      <ModelList api={api} onOpen={(id) => navigate(`/models/${id}`)} />
+      <ModelList api={api} />
     </div>
   );
 }

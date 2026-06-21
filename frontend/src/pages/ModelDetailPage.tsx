@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError, api } from "../api/client";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { EditModelForm } from "../components/EditModelForm";
 import { NewVersionForm } from "../components/NewVersionForm";
 import { formatDateTime } from "../lib/format";
-import type { Model, Version, VersionMetrics } from "../types";
+import type { Endpoint, Model, Version, VersionMetrics } from "../types";
 
 interface CompareRow {
   version: string;
@@ -23,18 +25,30 @@ const STATUS_BADGE: Record<string, string> = {
 export function ModelDetailPage() {
   const { t, i18n } = useTranslation();
   const { modelId = "" } = useParams();
+  const navigate = useNavigate();
   const [model, setModel] = useState<Model | null>(null);
   const [versions, setVersions] = useState<Version[]>([]);
   const [compare, setCompare] = useState<CompareRow[]>([]);
+  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
 
   async function reload() {
     try {
       setError("");
+      setActionError(""); // 重载成功即清掉上一轮删除/操作失败的残留提示
       setModel(await api.getModel(modelId));
       setVersions(await api.listVersions(modelId));
       setCompare(await api.compareVersions(modelId));
+      try {
+        // 端点信息是次要的,失败不应让整页崩(用于「部署于」与删除守卫提示)。
+        setEndpoints(await api.listEndpoints());
+      } catch {
+        setEndpoints([]);
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.detail : t("error.load"));
     }
@@ -43,6 +57,17 @@ export function ModelDetailPage() {
   useEffect(() => {
     void reload();
   }, [modelId]);
+
+  async function handleDelete() {
+    try {
+      setActionError("");
+      await api.deleteModel(modelId);
+      navigate("/models");
+    } catch (e) {
+      // 被端点绑定时后端返回 409;页内如实提示,不崩页、不跳转。
+      setActionError(e instanceof ApiError ? e.detail : t("error.action"));
+    }
+  }
 
   if (error) {
     return (
@@ -65,6 +90,13 @@ export function ModelDetailPage() {
 
   const fmtMetric = (v: number | null | undefined) => (v == null ? "—" : String(v));
 
+  // 绑定了本模型任一版本的端点 —— 驱动「部署于」展示与删除守卫(被绑定则禁用删除)。
+  const versionIds = new Set(versions.map((v) => v.id));
+  const boundEndpoints = endpoints.filter((ep) =>
+    ep.bindings.some((b) => versionIds.has(b.model_version_id)),
+  );
+  const deleteBlocked = boundEndpoints.length > 0;
+
   const card = "bg-panel border border-border rounded-[14px]";
 
   return (
@@ -76,18 +108,52 @@ export function ModelDetailPage() {
         {t("models.back")}
       </Link>
 
-      <div>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <h2 className="m-0 text-[22px] font-extrabold tracking-tight">{model.name}</h2>
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-md text-text2 bg-surface">
-            {t(`taskType.${model.task_type}`)}
-          </span>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h2 className="m-0 text-[22px] font-extrabold tracking-tight">{model.name}</h2>
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-md text-text2 bg-surface">
+              {model.task_type === "custom" && model.custom_task_type
+                ? model.custom_task_type
+                : t(`taskType.${model.task_type}`)}
+            </span>
+          </div>
+          <div className="text-muted text-[13px] mt-1">
+            {model.description} · {t("field.createdAt")}{" "}
+            {formatDateTime(model.created_at, i18n.language)}
+          </div>
         </div>
-        <div className="text-muted text-[13px] mt-1">
-          {model.description} · {t("field.createdAt")}{" "}
-          {formatDateTime(model.created_at, i18n.language)}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            data-testid="edit-model"
+            onClick={() => {
+              setActionError(""); // 清掉上一轮删除失败的残留红条,避免跨操作误读
+              setEditOpen(true);
+            }}
+            className="border border-border rounded-lg px-3 py-1.5 text-xs font-bold text-text2 bg-panel hover:bg-surface"
+          >
+            {t("action.edit")}
+          </button>
+          <button
+            type="button"
+            data-testid="delete-model"
+            disabled={deleteBlocked}
+            title={deleteBlocked ? t("models.deleteBlockedHint") : undefined}
+            onClick={() => setConfirmDelete(true)}
+            className="border border-border rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ color: "#dc2626" }}
+          >
+            {t("action.delete")}
+          </button>
         </div>
       </div>
+
+      {actionError && (
+        <div data-testid="action-error" className="text-red-600 text-sm">
+          {actionError}
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 16, alignItems: "start" }}>
         {/* left: versions + compare */}
@@ -112,6 +178,21 @@ export function ModelDetailPage() {
                     await reload();
                   }}
                 />
+              </div>
+            )}
+            {versions.length === 0 && !showForm && (
+              <div data-testid="versions-empty" className="px-[18px] py-7 text-center">
+                <div className="text-faint text-[13px] mb-3 leading-relaxed">
+                  {t("version.emptyGuide")}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowForm(true)}
+                  className="inline-flex items-center h-[34px] px-3.5 rounded-[10px] text-white font-bold text-[13px]"
+                  style={{ background: "var(--accent)" }}
+                >
+                  + {t("action.newVersion")}
+                </button>
               </div>
             )}
             {versions.map((v) => (
@@ -164,8 +245,30 @@ export function ModelDetailPage() {
           </div>
         </div>
 
-        {/* right: meta + schema */}
+        {/* right: deployed-on + schema */}
         <div className="space-y-4">
+          <div className={card} style={{ padding: "16px 18px" }}>
+            <div className="font-extrabold text-[13px] mb-2">{t("models.deployedOn")}</div>
+            {boundEndpoints.length === 0 ? (
+              <div data-testid="deployed-none" className="text-faint text-xs">
+                {t("models.notDeployed")}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {boundEndpoints.map((ep) => (
+                  <Link
+                    key={ep.id}
+                    to="/endpoints"
+                    data-testid={`deployed-on-${ep.id}`}
+                    className="flex items-center justify-between gap-2 no-underline rounded-md px-1.5 py-1 hover:bg-surface2"
+                  >
+                    <span className="font-bold text-[12.5px] text-text">{ep.name}</span>
+                    <span className="mono text-[11px] text-faint">{ep.url_path}</span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
           <div className={card} style={{ padding: "16px 18px" }}>
             <div className="font-extrabold text-[13px] mb-3">{t("field.inputSchema")}</div>
             <pre className="mono m-0 mb-3.5 p-3 rounded-[9px] text-[11px] leading-relaxed overflow-x-auto whitespace-pre-wrap"
@@ -180,6 +283,56 @@ export function ModelDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* 编辑模型弹窗(仅 name/description) */}
+      {editOpen && (
+        <>
+          <div
+            onClick={() => setEditOpen(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 90 }}
+          />
+          <div
+            role="dialog"
+            aria-label={t("models.editTitle")}
+            style={{
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%,-50%)",
+              width: 460,
+              maxWidth: "94vw",
+              zIndex: 91,
+              boxShadow: "0 24px 70px rgba(15,23,42,.3)",
+            }}
+            className="bg-panel rounded-2xl"
+          >
+            <div className="px-6 py-5 border-b border-border-soft font-extrabold text-base">
+              {t("models.editTitle")}
+            </div>
+            <div className="px-6 py-5">
+              <EditModelForm
+                model={model}
+                onSubmit={async (fields) => {
+                  await api.updateModel(modelId, fields);
+                  setEditOpen(false);
+                  await reload();
+                }}
+                onCancel={() => setEditOpen(false)}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
+      <ConfirmDialog
+        open={confirmDelete}
+        message={t("models.confirmDelete", { name: model.name })}
+        onConfirm={() => {
+          setConfirmDelete(false);
+          void handleDelete();
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }
