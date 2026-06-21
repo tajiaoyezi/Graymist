@@ -27,6 +27,7 @@ class VersionService:
         framework: Framework | str,
         resource_req: dict | None,
         change_note: str = "",
+        metrics: dict | None = None,
     ) -> ModelVersionRow:
         await ModelService.get(session, model_id)  # 模型不存在 → 404
         row = ModelVersionRow(
@@ -37,6 +38,7 @@ class VersionService:
             resource_req=resource_req or {},
             change_note=change_note,
             status=VersionStatus.draft.value,
+            metrics=metrics,  # 选填;None 表示创建时未填指标(与 set_metrics 后补一致)
         )
         session.add(row)
         await session.flush()

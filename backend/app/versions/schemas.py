@@ -6,6 +6,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.domain.enums import Framework, VersionStatus
 
 
+class MetricsIn(BaseModel):
+    accuracy: float | None = None
+    latency: float | None = None
+    throughput: float | None = None
+
+
 class VersionCreate(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
 
@@ -14,16 +20,12 @@ class VersionCreate(BaseModel):
     framework: Framework
     resource_req: dict = Field(default_factory=dict)
     change_note: str = ""
+    # 创建时可选带上性能指标(选填);未填则保持 null,后续仍可在版本详情页补录。
+    metrics: MetricsIn | None = None
 
 
 class VersionTransition(BaseModel):
     target: VersionStatus
-
-
-class MetricsIn(BaseModel):
-    accuracy: float | None = None
-    latency: float | None = None
-    throughput: float | None = None
 
 
 class VersionOut(BaseModel):

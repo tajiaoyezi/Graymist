@@ -21,6 +21,7 @@ async def create_version(
         framework=payload.framework,
         resource_req=payload.resource_req,
         change_note=payload.change_note,
+        metrics=payload.metrics.model_dump() if payload.metrics else None,
     )
 
 
