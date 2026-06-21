@@ -1,0 +1,44 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import "../i18n";
+import { NewVersionForm } from "./NewVersionForm";
+
+describe("NewVersionForm", () => {
+  it("资源需求用数字字段填写,提交组装成 resource_req 对象", async () => {
+    const onSubmit = vi.fn();
+    render(<NewVersionForm onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByTestId("nv-version"), "v1");
+
+    const cpu = screen.getByTestId("nv-cpu");
+    await userEvent.clear(cpu);
+    await userEvent.type(cpu, "2");
+    const gpu = screen.getByTestId("nv-gpu-vram");
+    await userEvent.clear(gpu);
+    await userEvent.type(gpu, "2048");
+    // memory 保持默认 1024
+
+    await userEvent.click(screen.getByTestId("nv-submit"));
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      version: "v1",
+      resource_req: { cpu: 2, memory: 1024, gpu_vram: 2048 },
+    });
+  });
+
+  it("不再有原始 JSON 文本框(nv-resource-req 已移除)", () => {
+    render(<NewVersionForm onSubmit={vi.fn()} />);
+    expect(screen.queryByTestId("nv-resource-req")).toBeNull();
+  });
+
+  it("文件路径占位示例随推理框架变化(扩展名对应)", async () => {
+    render(<NewVersionForm onSubmit={vi.fn()} />);
+    const fp = screen.getByTestId("nv-file-path");
+    expect(fp).toHaveAttribute("placeholder", "/data/model.onnx"); // 默认 ONNX
+    await userEvent.selectOptions(screen.getByTestId("nv-framework"), "TensorRT");
+    expect(fp).toHaveAttribute("placeholder", "/data/model.engine");
+    await userEvent.selectOptions(screen.getByTestId("nv-framework"), "PyTorch");
+    expect(fp).toHaveAttribute("placeholder", "/data/model.pt");
+  });
+});

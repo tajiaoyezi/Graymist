@@ -33,7 +33,14 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     let detail = text;
     try {
       const body = JSON.parse(text);
-      if (body && typeof body.detail === "string") detail = body.detail;
+      if (body && typeof body.detail === "string") {
+        detail = body.detail;
+      } else if (Array.isArray(body?.detail)) {
+        // FastAPI 字段校验错误的 detail 是对象数组,取其可读 msg,避免甩给用户原始 JSON。
+        detail = body.detail
+          .map((e: { msg?: string }) => e?.msg ?? JSON.stringify(e))
+          .join("; ");
+      }
     } catch {
       /* 非 JSON，保留原文 */
     }

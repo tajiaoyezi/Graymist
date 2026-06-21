@@ -9,6 +9,7 @@ export interface Model {
   name: string;
   description: string;
   task_type: TaskType;
+  custom_task_type: string | null; // task_type=custom 时的自定义类型名,否则 null
   input_schema: Record<string, unknown>;
   output_schema: Record<string, unknown>;
   version_count: number;
