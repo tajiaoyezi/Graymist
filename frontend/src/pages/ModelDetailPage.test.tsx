@@ -87,6 +87,30 @@ describe("ModelDetailPage 错误处理", () => {
   });
 });
 
+describe("ModelDetailPage external-api 版本(REG-1)", () => {
+  it("external 版本(framework=null)显示来源标签,不渲染字面量 framework.null", async () => {
+    vi.mocked(api.listVersions).mockResolvedValue([
+      {
+        id: "v1",
+        model_id: "m1",
+        version: "v1",
+        source: "external-api",
+        file_path: null,
+        framework: null,
+        resource_req: {},
+        change_note: "",
+        status: "ready",
+        metrics: null,
+        created_at: "2026-01-01T00:00:00Z",
+        deployable: true,
+      },
+    ] as never);
+    renderPage();
+    expect(await screen.findByText("外部 API")).toBeInTheDocument(); // version.sourceLabel['external-api']
+    expect(screen.queryByText("framework.null")).toBeNull();
+  });
+});
+
 describe("ModelDetailPage 编辑/删除", () => {
   it("编辑 → 改名保存 → 调 updateModel(仅 name/description)并刷新", async () => {
     renderPage();

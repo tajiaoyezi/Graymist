@@ -3,13 +3,20 @@ import type { FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ApiError } from "../api/client";
-import type { Framework, VersionMetrics } from "../types";
+import type { Framework, VersionMetrics, VersionSource } from "../types";
 
 export interface NewVersionInput {
   version: string;
-  file_path: string;
-  framework: Framework;
-  resource_req: Record<string, unknown>;
+  source: VersionSource;
+  file_path?: string;
+  framework?: Framework;
+  resource_req?: Record<string, unknown>;
+  // external-api 上游连接(仅 source=external-api)
+  provider?: string;
+  base_url?: string;
+  upstream_model?: string;
+  protocol?: string;
+  auth_ref?: string;
   change_note: string;
   metrics?: VersionMetrics; // 选填;三项全空则不带,版本 metrics 保持 null
 }
@@ -28,8 +35,14 @@ export function NewVersionForm({
 }) {
   const { t } = useTranslation();
   const [version, setVersion] = useState("");
+  const [source, setSource] = useState<VersionSource>("mock");
   const [filePath, setFilePath] = useState("");
   const [framework, setFramework] = useState<Framework>("ONNX");
+  // external-api 上游连接
+  const [provider, setProvider] = useState("openai");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [upstreamModel, setUpstreamModel] = useState("");
+  const [authRef, setAuthRef] = useState("");
   // 资源需求改为结构化数字字段(原先要求手填 JSON,体验差)。
   const [cpu, setCpu] = useState("1");
   const [memory, setMemory] = useState("1024");
@@ -51,26 +64,40 @@ export function NewVersionForm({
       };
       const anyMetric =
         acc.trim() !== "" || lat.trim() !== "" || thr.trim() !== "";
-      await onSubmit({
-        version,
-        file_path: filePath,
-        framework,
-        resource_req: {
-          cpu: Number(cpu) || 0,
-          memory: Number(memory) || 0,
-          gpu_vram: Number(gpuVram) || 0,
-        },
-        change_note: changeNote,
-        ...(anyMetric
-          ? {
-              metrics: {
-                accuracy: num(acc),
-                latency: num(lat),
-                throughput: num(thr),
-              },
-            }
-          : {}),
-      });
+      if (source === "external-api") {
+        await onSubmit({
+          version,
+          source: "external-api",
+          provider,
+          base_url: baseUrl,
+          upstream_model: upstreamModel,
+          protocol: "openai",
+          ...(authRef.trim() ? { auth_ref: authRef.trim() } : {}),
+          change_note: changeNote,
+        });
+      } else {
+        await onSubmit({
+          version,
+          source: "mock",
+          file_path: filePath,
+          framework,
+          resource_req: {
+            cpu: Number(cpu) || 0,
+            memory: Number(memory) || 0,
+            gpu_vram: Number(gpuVram) || 0,
+          },
+          change_note: changeNote,
+          ...(anyMetric
+            ? {
+                metrics: {
+                  accuracy: num(acc),
+                  latency: num(lat),
+                  throughput: num(thr),
+                },
+              }
+            : {}),
+        });
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : String(err));
     }
@@ -111,6 +138,49 @@ export function NewVersionForm({
           className={`${INPUT} mono`}
         />
       </label>
+      <div>
+        <div className="block text-[11px] font-bold text-muted mb-1">{t("version.source")}</div>
+        <div className="flex rounded-[9px] p-[3px]" style={{ background: "var(--surface)" }}>
+          {(["mock", "external-api"] as VersionSource[]).map((s) => (
+            <button
+              key={s}
+              type="button"
+              data-testid={`nv-source-${s}`}
+              onClick={() => setSource(s)}
+              className={`px-3 py-1.5 rounded-[7px] text-[12px] font-bold flex-1 ${source === s ? "text-white" : "text-text2"}`}
+              style={source === s ? { background: "var(--accent)" } : undefined}
+            >
+              {t(`version.sourceLabel.${s}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+      {source === "external-api" && (
+        <>
+          <label className="block">
+            <span className="block text-[11px] font-bold text-muted mb-1">{t("field.provider")}</span>
+            <input data-testid="nv-provider" value={provider} onChange={(e) => setProvider(e.target.value)} className={INPUT} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-bold text-muted mb-1">{t("field.baseUrl")}</span>
+            <input data-testid="nv-base-url" placeholder={t("field.baseUrlHint")} value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} className={`${INPUT} mono`} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-bold text-muted mb-1">{t("field.upstreamModel")}</span>
+            <input data-testid="nv-upstream-model" placeholder={t("field.upstreamModelHint")} value={upstreamModel} onChange={(e) => setUpstreamModel(e.target.value)} className={`${INPUT} mono`} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-bold text-muted mb-1">{t("field.protocol")}</span>
+            <input data-testid="nv-protocol" value="openai" readOnly className={`${INPUT} mono opacity-70`} />
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-bold text-muted mb-1">{t("field.authRef")}</span>
+            <input data-testid="nv-auth-ref" placeholder={t("field.authRefHint")} value={authRef} onChange={(e) => setAuthRef(e.target.value)} className={`${INPUT} mono`} />
+          </label>
+        </>
+      )}
+      {source === "mock" && (
+        <>
       <label className="block">
         <span className="block text-[11px] font-bold text-muted mb-1">
           {t("field.filePath")}
@@ -150,6 +220,8 @@ export function NewVersionForm({
           {numField("nv-gpu-vram", t("field.gpuVram"), gpuVram, setGpuVram)}
         </div>
       </div>
+        </>
+      )}
       <label className="block">
         <span className="block text-[11px] font-bold text-muted mb-1">
           {t("field.changeNote")}
@@ -162,16 +234,18 @@ export function NewVersionForm({
           className={INPUT}
         />
       </label>
-      <div>
-        <div className="text-[11px] font-bold text-muted mb-1">
-          {t("field.metricsOptional")}
+      {source === "mock" && (
+        <div>
+          <div className="text-[11px] font-bold text-muted mb-1">
+            {t("field.metricsOptional")}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {numField("nv-accuracy", t("metrics.accuracy"), acc, setAcc, "any")}
+            {numField("nv-latency", t("metrics.latency"), lat, setLat, "any")}
+            {numField("nv-throughput", t("metrics.throughput"), thr, setThr, "any")}
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          {numField("nv-accuracy", t("metrics.accuracy"), acc, setAcc, "any")}
-          {numField("nv-latency", t("metrics.latency"), lat, setLat, "any")}
-          {numField("nv-throughput", t("metrics.throughput"), thr, setThr, "any")}
-        </div>
-      </div>
+      )}
       {error && (
         <div data-testid="nv-error" className="text-danger text-sm">
           {error}

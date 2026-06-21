@@ -41,4 +41,37 @@ describe("NewVersionForm", () => {
     await userEvent.selectOptions(screen.getByTestId("nv-framework"), "PyTorch");
     expect(fp).toHaveAttribute("placeholder", "/data/model.pt");
   });
+
+  it("默认 mock 来源:提交带 source=mock 与 file_path/framework", async () => {
+    const onSubmit = vi.fn();
+    render(<NewVersionForm onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByTestId("nv-version"), "v1");
+    await userEvent.type(screen.getByTestId("nv-file-path"), "/m/v1.onnx");
+    await userEvent.click(screen.getByTestId("nv-submit"));
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      version: "v1",
+      source: "mock",
+      file_path: "/m/v1.onnx",
+      framework: "ONNX",
+    });
+  });
+
+  it("切换 external-api:隐藏 file_path/framework、显示上游字段,提交带来源", async () => {
+    const onSubmit = vi.fn();
+    render(<NewVersionForm onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByTestId("nv-version"), "v1");
+    await userEvent.click(screen.getByTestId("nv-source-external-api"));
+    expect(screen.queryByTestId("nv-file-path")).toBeNull(); // mock 字段隐藏
+    expect(screen.queryByTestId("nv-framework")).toBeNull();
+    await userEvent.type(screen.getByTestId("nv-base-url"), "http://up/v1");
+    await userEvent.type(screen.getByTestId("nv-upstream-model"), "gpt-4o-mini");
+    await userEvent.click(screen.getByTestId("nv-submit"));
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      version: "v1",
+      source: "external-api",
+      base_url: "http://up/v1",
+      upstream_model: "gpt-4o-mini",
+      protocol: "openai",
+    });
+  });
 });

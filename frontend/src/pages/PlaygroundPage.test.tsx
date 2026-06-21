@@ -266,3 +266,42 @@ describe("PlaygroundPage 接通推理 API", () => {
     expect(screen.getByTestId("pg-hist-0")).toHaveTextContent("6 并发(异步)· 6 入队 · 0 拒绝");
   });
 });
+
+describe("PlaygroundPage external-api(a5)", () => {
+  const EXT_EP = { ...RUNNING_EP, bindings: [{ model_version_id: "ve", weight: 100 }] };
+  function setupExternal() {
+    M.listEndpoints.mockResolvedValue([EXT_EP]);
+    M.getVersion.mockResolvedValue({ id: "ve", model_id: "me", source: "external-api" });
+    // input_schema 形如 object(有 properties)——验证 external 仍不生成动态表单(DOM-3)。
+    M.getModel.mockResolvedValue({
+      id: "me",
+      input_schema: { type: "object", properties: { messages: { type: "array" } } },
+      output_schema: {},
+    });
+    M.listInferenceLogs.mockResolvedValue([]);
+  }
+
+  it("external-api 端点渲染 chat 编排器,不据 input_schema 生成动态表单", async () => {
+    setupExternal();
+    render(<PlaygroundPage />);
+    expect(await screen.findByTestId("pg-chat-composer")).toBeInTheDocument();
+    expect(screen.queryByTestId("pg-field-messages")).toBeNull(); // 即便 schema 形如 object
+    expect(screen.queryByTestId("pg-raw-input")).toBeNull();
+  });
+
+  it("external-api 同步发送 chat 输入 + 展示真实结果与 usage", async () => {
+    setupExternal();
+    M.infer.mockResolvedValue({
+      result: "echo: hi",
+      version_id: "ve",
+      latency_ms: 12,
+      usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+    });
+    render(<PlaygroundPage />);
+    await screen.findByTestId("pg-chat-composer");
+    await userEvent.type(screen.getByTestId("pg-chat-content-0"), "hi");
+    await userEvent.click(screen.getByRole("button", { name: "发送请求" }));
+    expect(await screen.findByTestId("pg-usage")).toHaveTextContent("1/2/3"); // prompt/completion/total 数值+顺序
+    expect(M.infer).toHaveBeenCalledWith("e1", { messages: [{ role: "user", content: "hi" }] });
+  });
+});

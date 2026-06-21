@@ -34,6 +34,17 @@ describe("CreateModelForm", () => {
     });
   });
 
+  it("勾选 external-chat → 预填只读 chat schema,取消后恢复可编辑(fe-1)", async () => {
+    render(<CreateModelForm onSubmit={vi.fn()} />);
+    await userEvent.click(screen.getByTestId("model-external-chat"));
+    const inputSchema = screen.getByTestId("input-schema") as HTMLTextAreaElement;
+    expect(inputSchema.value).toContain("messages"); // 预填 canonical chat schema
+    expect(inputSchema).toHaveAttribute("readonly");
+    expect(screen.getByTestId("output-schema")).toHaveAttribute("readonly");
+    await userEvent.click(screen.getByTestId("model-external-chat")); // 取消勾选
+    expect(screen.getByTestId("input-schema")).not.toHaveAttribute("readonly");
+  });
+
   it("后端报错（onSubmit reject）→ 表单显示服务端错误（M1）", async () => {
     const onSubmit = vi.fn().mockRejectedValue(new ApiError(422, "名称重复"));
     render(<CreateModelForm onSubmit={onSubmit} />);

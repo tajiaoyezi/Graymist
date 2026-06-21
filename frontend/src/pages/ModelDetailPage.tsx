@@ -202,7 +202,13 @@ export function ModelDetailPage() {
                   {resourceSummary(v.resource_req)}
                 </span>
                 <span className="flex-1" />
-                <span className="text-[11.5px] text-faint">{t(`framework.${v.framework}`)}</span>
+                <span className="text-[11.5px] text-faint">
+                  {v.source === "external-api"
+                    ? t("version.sourceLabel.external-api")
+                    : v.framework
+                      ? t(`framework.${v.framework}`)
+                      : "—"}
+                </span>
                 <span className="mono text-[11px] text-faint2">
                   {formatDateTime(v.created_at, i18n.language)}
                 </span>

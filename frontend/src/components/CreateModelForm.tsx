@@ -36,6 +36,11 @@ const OUTPUT_EXAMPLE = {
   type: "object",
   properties: { label: { type: "string" }, score: { type: "number" } },
 };
+// a5：external-api(chat)模型的固定 canonical chat schema(只描述、不强校验;推理按 chat 形状校验)。
+const CHAT_SCHEMA = {
+  type: "object",
+  properties: { messages: { type: "array" }, system: { type: "string" } },
+};
 
 // 缺 properties 的对象 Schema(如空 {})→ Playground 无法据此生成输入表单,给非阻断提示。
 function lacksProperties(text: string): boolean {
@@ -59,7 +64,18 @@ export function CreateModelForm({
   const [customTaskType, setCustomTaskType] = useState("");
   const [inputSchema, setInputSchema] = useState("{}");
   const [outputSchema, setOutputSchema] = useState("{}");
+  const [externalChat, setExternalChat] = useState(false);
   const [error, setError] = useState("");
+
+  // external-api(chat)模型:预填只读 canonical chat schema 满足必填列,用户无需手写。
+  function toggleExternalChat(on: boolean) {
+    setExternalChat(on);
+    if (on) {
+      setInputSchema(JSON.stringify(CHAT_SCHEMA, null, 2));
+      setOutputSchema("{}");
+      setError("");
+    }
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -158,6 +174,15 @@ export function CreateModelForm({
           />
         </label>
       )}
+      <label className="flex items-center gap-2 text-xs font-bold text-muted">
+        <input
+          type="checkbox"
+          data-testid="model-external-chat"
+          checked={externalChat}
+          onChange={(e) => toggleExternalChat(e.target.checked)}
+        />
+        {t("field.externalChatModel")}
+      </label>
       <label className="block">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold text-muted">{t("field.inputSchema")}</span>
@@ -187,8 +212,9 @@ export function CreateModelForm({
           data-testid="input-schema"
           value={inputSchema}
           onChange={(e) => setInputSchema(e.target.value)}
+          readOnly={externalChat}
           rows={4}
-          className={`${INPUT} mono`}
+          className={`${INPUT} mono ${externalChat ? "opacity-70" : ""}`}
         />
         <div className="text-[11px] text-faint mt-1">{t("field.schemaHint")}</div>
         {lacksProperties(inputSchema) && (
@@ -230,8 +256,9 @@ export function CreateModelForm({
           data-testid="output-schema"
           value={outputSchema}
           onChange={(e) => setOutputSchema(e.target.value)}
+          readOnly={externalChat}
           rows={4}
-          className={`${INPUT} mono`}
+          className={`${INPUT} mono ${externalChat ? "opacity-70" : ""}`}
         />
         <div className="text-[11px] text-faint mt-1">{t("field.schemaHint")}</div>
       </label>

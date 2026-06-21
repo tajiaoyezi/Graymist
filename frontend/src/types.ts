@@ -24,13 +24,22 @@ export interface VersionMetrics {
   throughput?: number | null;
 }
 
+export type VersionSource = "mock" | "external-api";
+
 export interface Version {
   id: string;
   model_id: string;
   version: string;
-  file_path: string;
-  framework: Framework;
+  source: VersionSource; // a5:mock=模拟;external-api=真转发上游
+  file_path: string | null; // external-api 为 null
+  framework: Framework | null;
   resource_req: Record<string, unknown>;
+  // external-api 上游连接(仅 source=external-api)。auth_ref 为凭证引用,非明文密钥。
+  provider?: string | null;
+  base_url?: string | null;
+  upstream_model?: string | null;
+  protocol?: string | null;
+  auth_ref?: string | null;
   change_note: string;
   status: VersionStatus;
   metrics: VersionMetrics | null;
@@ -70,11 +79,18 @@ export interface QuotaInfo {
   remaining: ResourceQuota;
 }
 
-// a3 推理调用
+// a3 推理调用(a5 增 usage)
+export interface TokenUsage {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 export interface InferResult {
   result: unknown;
   version_id: string;
   latency_ms: number;
+  usage?: TokenUsage | null; // a5:external-api 真实 token 用量;mock 为 null
 }
 
 export interface AsyncSubmit {

@@ -3,7 +3,12 @@ import { useTranslation } from "react-i18next";
 
 import { ApiError, api } from "../api/client";
 import { type SchemaField, parseSchemaInput, schemaFields } from "../lib/schema";
-import type { AsyncTask, Endpoint, InferenceLog } from "../types";
+import type { AsyncTask, Endpoint, InferenceLog, TokenUsage } from "../types";
+
+interface ChatMessage {
+  role: string;
+  content: string;
+}
 
 // 推理 Playground(§2.7):接通真实推理 API —— 选 running 端点、按 input_schema 动态生成
 // 表单、同步/异步调用(异步轮询至终态)、会话历史可回填。严守 v1.0 范围,不含流式/成本/协议切换。
@@ -35,6 +40,7 @@ interface Resp {
   latency_ms: number | null;
   version_id: string | null;
   status: string | null;
+  usage?: TokenUsage | null; // a5:external-api 真实 token 用量
 }
 
 // 并发压测:一次性打出 N 个请求验证端点限流/排队策略。
@@ -56,6 +62,10 @@ export function PlaygroundPage() {
   const [fields, setFields] = useState<SchemaField[] | null>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, string | boolean>>({});
   const [rawJson, setRawJson] = useState("{}");
+  // a5:external-api 端点用 chat 编排器(不据 input_schema 生成动态表单)。
+  const [isExternal, setIsExternal] = useState(false);
+  const [chatSystem, setChatSystem] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([{ role: "user", content: "" }]);
   const [mode, setMode] = useState<"sync" | "async">("sync");
   // 并发 = 同步/异步之上的修饰维度(并非第三种模式):勾上即一次打出 N 个当前模式的请求。
   const [concurrent, setConcurrent] = useState(false);
@@ -114,9 +124,19 @@ export function PlaygroundPage() {
         const version = await api.getVersion(binding.model_version_id);
         const model = await api.getModel(version.model_id);
         if (cancelled) return;
-        setFields(schemaFields(model.input_schema));
+        const ext = version.source === "external-api";
+        setIsExternal(ext);
+        // DOM-3:先按来源分流 —— external 端点强制 chat 编排器,绝不据 input_schema 生成动态表单。
+        setFields(ext ? null : schemaFields(model.input_schema));
+        if (ext) {
+          setChatSystem("");
+          setChatMessages([{ role: "user", content: "" }]);
+        }
         setFieldValues({});
         setRawJson("{}");
+        // 会话历史按端点作用域:切端点时清空,避免跨端点(尤其 mock↔external)回填得到错误/空输入(fe-2)。
+        setHistory([]);
+        setResp(null);
         setConcResults(null);
         setAsyncTrace(null);
         setQueryId("");
@@ -138,6 +158,13 @@ export function PlaygroundPage() {
   }
 
   function buildInput(): unknown {
+    if (isExternal) {
+      const messages = chatMessages
+        .filter((m) => m.content.trim() !== "")
+        .map((m) => ({ role: m.role, content: m.content }));
+      const sys = chatSystem.trim();
+      return sys ? { system: sys, messages } : { messages };
+    }
     if (fields) {
       const obj: Record<string, unknown> = {};
       for (const f of fields) {
@@ -245,6 +272,10 @@ export function PlaygroundPage() {
       setError(t("playground.missingRequired", { fields: missing.join("、") }));
       return;
     }
+    if (isExternal && chatMessages.every((m) => m.content.trim() === "")) {
+      setError(t("playground.chatEmpty"));
+      return;
+    }
     setError("");
     setSending(true);
     setAsyncTrace(null);
@@ -319,7 +350,7 @@ export function PlaygroundPage() {
       let item: HistItem;
       if (mode === "sync") {
         const res = await api.infer(endpointId, input);
-        const r: Resp = { result: res.result, latency_ms: res.latency_ms, version_id: res.version_id, status: null };
+        const r: Resp = { result: res.result, latency_ms: res.latency_ms, version_id: res.version_id, status: null, usage: res.usage };
         setResp(r);
         item = { mode: "sync", input, result: res.result, latency_ms: res.latency_ms, version_id: res.version_id, status: null };
       } else {
@@ -352,7 +383,15 @@ export function PlaygroundPage() {
   }
 
   function refill(item: HistItem) {
-    if (fields) {
+    if (isExternal) {
+      const inp = (item.input ?? {}) as { system?: string; messages?: ChatMessage[] };
+      setChatSystem(inp.system ?? "");
+      setChatMessages(
+        inp.messages?.length
+          ? inp.messages.map((m) => ({ role: m.role, content: m.content }))
+          : [{ role: "user", content: "" }],
+      );
+    } else if (fields) {
       const inp = (item.input ?? {}) as Record<string, unknown>;
       const next: Record<string, string | boolean> = {};
       for (const f of fields) {
@@ -483,7 +522,62 @@ export function PlaygroundPage() {
           )}
 
           <div className="text-[11px] text-faint font-bold mb-1.5">{t("playground.inputLabel")}</div>
-          {fields ? (
+          {isExternal ? (
+            <div className="space-y-3 mb-4" data-testid="pg-chat-composer">
+              <div>
+                <label className="text-[11px] text-faint font-bold mb-1 block">{t("playground.chatSystem")}</label>
+                <textarea
+                  data-testid="pg-chat-system"
+                  value={chatSystem}
+                  onChange={(e) => setChatSystem(e.target.value)}
+                  className="w-full rounded-[9px] border border-border bg-panel px-2.5 py-2 text-sm outline-none"
+                  style={{ height: 52, resize: "vertical" }}
+                />
+              </div>
+              {chatMessages.map((m, i) => (
+                <div key={i} className="flex gap-2 items-start">
+                  <select
+                    data-testid={`pg-chat-role-${i}`}
+                    value={m.role}
+                    onChange={(e) =>
+                      setChatMessages((ms) => ms.map((x, j) => (j === i ? { ...x, role: e.target.value } : x)))
+                    }
+                    className="h-[36px] rounded-[9px] border border-border bg-panel px-2 text-sm outline-none"
+                  >
+                    <option value="user">user</option>
+                    <option value="assistant">assistant</option>
+                  </select>
+                  <input
+                    data-testid={`pg-chat-content-${i}`}
+                    value={m.content}
+                    onChange={(e) =>
+                      setChatMessages((ms) => ms.map((x, j) => (j === i ? { ...x, content: e.target.value } : x)))
+                    }
+                    placeholder={t("playground.chatContentHint")}
+                    className={`${inputCls} flex-1`}
+                  />
+                  {chatMessages.length > 1 && (
+                    <button
+                      type="button"
+                      data-testid={`pg-chat-remove-${i}`}
+                      onClick={() => setChatMessages((ms) => ms.filter((_, j) => j !== i))}
+                      className="h-[36px] px-2.5 rounded-[9px] border border-border text-text2 text-sm"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                data-testid="pg-chat-add"
+                onClick={() => setChatMessages((ms) => [...ms, { role: "user", content: "" }])}
+                className="text-[12px] font-bold text-accent"
+              >
+                + {t("playground.chatAddMessage")}
+              </button>
+            </div>
+          ) : fields ? (
             <div className="space-y-3 mb-4">
               {fields.map((f) => (
                 <div key={f.name}>
@@ -765,6 +859,14 @@ export function PlaygroundPage() {
                   {resp.latency_ms != null && (
                     <span>
                       {t("playground.latency")}: <span className="mono">{`${resp.latency_ms} ms`}</span>
+                    </span>
+                  )}
+                  {resp.usage && (
+                    <span data-testid="pg-usage">
+                      {t("playground.usage")}:{" "}
+                      <span className="mono">
+                        {`${resp.usage.prompt_tokens}/${resp.usage.completion_tokens}/${resp.usage.total_tokens}`}
+                      </span>
                     </span>
                   )}
                   {resp.status && (
