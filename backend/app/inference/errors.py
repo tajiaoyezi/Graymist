@@ -24,7 +24,15 @@ class InferenceInputInvalidError(Exception):
 
     刻意不复用 common.schema_validation.InvalidSchemaError —— 后者语义是「Schema 本身非法」,
     文案会误导;此处是「实例 against schema」校验失败。
+    a5：external-api 来源的 chat 形状校验失败、南向协议未支持也复用此错误(均 422)。
     """
 
     def __init__(self, msg: str = "推理输入不符合 input_schema"):
+        super().__init__(msg)
+
+
+class UpstreamError(Exception):
+    """external-api 推理时上游返回非 2xx 或响应不可解析(映射为 HTTP 502)。a5。"""
+
+    def __init__(self, msg: str = "上游返回错误"):
         super().__init__(msg)

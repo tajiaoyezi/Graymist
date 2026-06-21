@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # a3 推理执行模拟耗时区间（秒，原 2.3：100ms~3s）。测试设 0/可注入。
     infer_latency_min_seconds: float = 0.1
     infer_latency_max_seconds: float = 3.0
+    # a5 external-api 南向接入。upstream_mock=True：走内置打桩上游（确定性、无 key/无网络）；
+    # 接真上游时翻转为 False。整体往返超时走端点 timeout_ms（asyncio.wait_for），此处仅 httpx 连接级兜底。
+    upstream_mock: bool = True
+    upstream_connect_timeout_seconds: float = 30.0
 
 
 settings = Settings()

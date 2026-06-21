@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
@@ -25,7 +26,7 @@ from app.db.tables import (
     ModelVersionRow,
 )
 from app.domain.enums import EndpointStatus, VersionStatus
-from app.inference import concurrency, executor, runner
+from app.inference import canonical, concurrency, executor, external, runner
 from app.inference.errors import (
     InferenceInputInvalidError,
     InferenceTimeoutError,
@@ -121,7 +122,8 @@ class InferenceService:
 
     @staticmethod
     async def _log(
-        session: AsyncSession, *, endpoint_id, version_id, mode, input_data, output, latency_ms, status
+        session: AsyncSession, *, endpoint_id, version_id, mode, input_data, output, latency_ms,
+        status, prompt_tokens=None, completion_tokens=None, total_tokens=None,
     ) -> None:
         session.add(
             InferenceLogRow(
@@ -132,9 +134,38 @@ class InferenceService:
                 output_summary=_summary(output),
                 latency_ms=latency_ms,
                 status=status,
+                prompt_tokens=prompt_tokens,  # external 落真值;mock 留空
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
             )
         )
         await session.flush()
+
+    @staticmethod
+    async def _endpoint_source(session: AsyncSession, endpoint_id: str) -> str:
+        """端点来源 = 其任一绑定版本的 source(单一来源守卫保证同质)。"""
+        b = (
+            await session.execute(
+                select(EndpointVersionBindingRow).where(
+                    EndpointVersionBindingRow.endpoint_id == endpoint_id
+                )
+            )
+        ).scalars().first()
+        if b is None:
+            return "mock"
+        v = await session.get(ModelVersionRow, b.model_version_id)
+        return (v.source or "mock") if v is not None else "mock"
+
+    @staticmethod
+    def _validate_by_source(source: str, input_schema, payload) -> None:
+        """按来源派发输入校验(422 前置):mock→input_schema;external-api→chat 形状。"""
+        if source == "external-api":
+            if not canonical.is_chat_like(payload):
+                raise InferenceInputInvalidError(
+                    "external-api 推理输入需为 chat 形状(含 messages)"
+                )
+        else:
+            InferenceService._validate_input(input_schema, payload)
 
     # ---- 核心执行(不含校验/限流;同步与异步复用) ----
 
@@ -151,25 +182,50 @@ class InferenceService:
             raise ConflictError("端点无可用(ready)版本")
 
         version_id = None
+        usage = None
         try:
             chosen = executor.select_binding(ready)
             version_id = chosen["model_version_id"]
             version_row = await session.get(ModelVersionRow, version_id)
             model = await session.get(ModelRow, version_row.model_id)
-            delay = executor.simulate_latency_seconds()
-            await asyncio.sleep(delay)
-            latency_ms = round(delay * 1000)
-            if latency_ms > ep.timeout_ms:
-                await InferenceService._log(
-                    session, endpoint_id=endpoint_id, version_id=version_id, mode=mode,
-                    input_data=input_data, output=None, latency_ms=latency_ms, status=ST_TIMEOUT,
-                )
-                await session.commit()
-                raise InferenceTimeoutError("推理超时")
-            output = executor.generate_output(model.output_schema)
+            if (version_row.source or "mock") == "external-api":
+                # external-api：真转发上游;整体往返超时走端点 timeout_ms。
+                try:
+                    content, latency_ms, cusage = await asyncio.wait_for(
+                        external.run(version_row, input_data),
+                        timeout=ep.timeout_ms / 1000,
+                    )
+                except asyncio.TimeoutError:
+                    # 既有 except (InferenceTimeoutError, ...) 分支不写日志,故超时在此显式落
+                    # ST_TIMEOUT 再抛(与 mock 超时对齐,CORRECT-2)。
+                    await InferenceService._log(
+                        session, endpoint_id=endpoint_id, version_id=version_id, mode=mode,
+                        input_data=input_data, output=None, latency_ms=ep.timeout_ms, status=ST_TIMEOUT,
+                    )
+                    await session.commit()
+                    raise InferenceTimeoutError("上游推理超时")
+                output = content
+                usage = {
+                    "prompt_tokens": cusage.input_tokens,
+                    "completion_tokens": cusage.output_tokens,
+                    "total_tokens": cusage.total_tokens,
+                }
+            else:
+                # mock 来源：模拟执行(行为与 v1.0 字节一致)。
+                delay = executor.simulate_latency_seconds()
+                await asyncio.sleep(delay)
+                latency_ms = round(delay * 1000)
+                if latency_ms > ep.timeout_ms:
+                    await InferenceService._log(
+                        session, endpoint_id=endpoint_id, version_id=version_id, mode=mode,
+                        input_data=input_data, output=None, latency_ms=latency_ms, status=ST_TIMEOUT,
+                    )
+                    await session.commit()
+                    raise InferenceTimeoutError("推理超时")
+                output = executor.generate_output(model.output_schema)
         except (InferenceTimeoutError, ConflictError):
             raise
-        except Exception:  # 未预期的执行错误 → 落 error 日志后上抛
+        except Exception:  # 未预期/上游错误(UpstreamError) → 落 error 日志后上抛(→ 502/500)
             await session.rollback()
             await InferenceService._log(
                 session, endpoint_id=endpoint_id, version_id=version_id, mode=mode,
@@ -181,9 +237,12 @@ class InferenceService:
         await InferenceService._log(
             session, endpoint_id=endpoint_id, version_id=version_id, mode=mode,
             input_data=input_data, output=output, latency_ms=latency_ms, status=ST_SUCCESS,
+            prompt_tokens=(usage or {}).get("prompt_tokens"),
+            completion_tokens=(usage or {}).get("completion_tokens"),
+            total_tokens=(usage or {}).get("total_tokens"),
         )
         await session.commit()
-        return {"result": output, "version_id": version_id, "latency_ms": latency_ms}
+        return {"result": output, "version_id": version_id, "latency_ms": latency_ms, "usage": usage}
 
     # ---- 同步推理 ----
 
@@ -191,7 +250,8 @@ class InferenceService:
     async def infer_sync(session: AsyncSession, endpoint_id: str, input_data) -> dict:
         ep = await InferenceService._running_endpoint(session, endpoint_id)  # 404 / 409
         model = await InferenceService._model(session, endpoint_id)
-        InferenceService._validate_input(model.input_schema, input_data)  # 422 前置:不占额度/不落日志
+        source = await InferenceService._endpoint_source(session, endpoint_id)
+        InferenceService._validate_by_source(source, model.input_schema, input_data)  # 422 前置
         ctrl = concurrency.get_controller(ep.id, ep.max_concurrency)
         if not ctrl.try_acquire():
             await InferenceService._log(
@@ -213,7 +273,8 @@ class InferenceService:
     async def submit_async(session: AsyncSession, bg_sessionmaker, endpoint_id: str, input_data) -> dict:
         ep = await InferenceService._running_endpoint(session, endpoint_id)  # 404 / 409
         model = await InferenceService._model(session, endpoint_id)
-        InferenceService._validate_input(model.input_schema, input_data)  # 422 前置:不建任务/不入队
+        source = await InferenceService._endpoint_source(session, endpoint_id)
+        InferenceService._validate_by_source(source, model.input_schema, input_data)  # 422 前置
         task = AsyncInferenceTaskRow(endpoint_id=ep.id, status=T_QUEUED, input=input_data)
         session.add(task)
         await session.flush()
@@ -270,4 +331,40 @@ class InferenceService:
             "result": row.result,
             "created_at": row.created_at,
             "finished_at": row.finished_at,
+        }
+
+    # ---- 北向 OpenAI 兼容寻址(a5,§12/§21;免鉴权止步线 = v1.1.1) ----
+
+    @staticmethod
+    async def infer_chat_completions(session: AsyncSession, model_name: str, body: dict) -> dict:
+        """`model` → 端点 url_path 寻址,复用 infer_sync,回 OpenAI 形状响应。
+
+        刻意不读 Authorization/x-api-key、不认调用方、不做按调用方限流(均 v1.1.1)。
+        """
+        ep = await session.scalar(
+            select(EndpointRow).where(EndpointRow.url_path == model_name)
+        )
+        if ep is None:
+            raise NotFoundError("model(端点 url_path)")
+        res = await InferenceService.infer_sync(session, ep.id, body)  # 409 非 running / 422 / 502 / 504
+        content = res["result"]
+        if not isinstance(content, str):
+            content = _summary(content)
+        usage = res.get("usage") or {}
+        return {
+            "id": "chatcmpl-" + uuid4().hex[:24],
+            "object": "chat.completion",
+            "model": model_name,
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": content},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": usage.get("prompt_tokens") or 0,
+                "completion_tokens": usage.get("completion_tokens") or 0,
+                "total_tokens": usage.get("total_tokens") or 0,
+            },
         }

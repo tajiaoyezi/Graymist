@@ -58,8 +58,17 @@ class ModelVersionRow(Base):
         ForeignKey("model.id", ondelete="CASCADE"), index=True
     )
     version: Mapped[str] = mapped_column(String(64))
-    file_path: Mapped[str] = mapped_column(String(512))  # 模拟路径
-    framework: Mapped[str] = mapped_column(String(32))
+    # a5：来源维度（§11 1.1-a）。mock=v1.0 模拟执行；external-api=真转发上游。
+    source: Mapped[str] = mapped_column(String(32), default="mock")
+    # mock 来源：file_path/framework 必填（由服务层按 source 派发）；external-api 可空。
+    file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)  # 模拟路径
+    framework: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # external-api 上游连接（仅 source=external-api）。auth_ref 存凭证引用（环境变量名），非明文密钥。
+    provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    upstream_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    protocol: Mapped[str | None] = mapped_column(String(16), nullable=True)  # a5 仅 openai
+    auth_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     resource_req: Mapped[dict] = mapped_column(_json(), default=dict)
     change_note: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(32), default=VersionStatus.draft.value)
@@ -144,6 +153,10 @@ class InferenceLogRow(Base):
     output_summary: Mapped[str] = mapped_column(Text, default="")
     latency_ms: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(32))  # success/timeout/error/rate_limited
+    # a5：真实 token 用量（external-api 落上游归一化值；mock 来源留空）。v1.1.2 成本计量复用此缝。
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
 

@@ -20,6 +20,7 @@ from app.inference.errors import (
     InferenceInputInvalidError,
     InferenceTimeoutError,
     RateLimitedError,
+    UpstreamError,
 )
 from app.inference.router import router as inference_router
 from app.models.router import router as models_router
@@ -92,6 +93,11 @@ def create_app() -> FastAPI:
     @app.exception_handler(InferenceInputInvalidError)
     async def _infer_input_invalid(request: Request, exc: InferenceInputInvalidError):
         return JSONResponse(status_code=422, content={"detail": str(exc)})
+
+    @app.exception_handler(UpstreamError)
+    async def _upstream_error(request: Request, exc: UpstreamError):
+        # a5:external-api 上游非 2xx / 响应不可解析 → 502。
+        return JSONResponse(status_code=502, content={"detail": str(exc)})
 
     @app.exception_handler(IntegrityError)
     async def _integrity(request: Request, exc: IntegrityError):

@@ -3,7 +3,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_bg_sessionmaker, get_session
-from app.inference.schemas import AsyncSubmitOut, AsyncTaskOut, InferIn, InferSyncOut
+from app.inference.schemas import (
+    AsyncSubmitOut,
+    AsyncTaskOut,
+    ChatCompletionsIn,
+    InferIn,
+    InferSyncOut,
+)
 from app.inference.service import InferenceService
 
 router = APIRouter(tags=["inference"])
@@ -33,3 +39,17 @@ async def infer_async(
 @router.get("/inference/tasks/{task_id}", response_model=AsyncTaskOut)
 async def get_task(task_id: str, session: AsyncSession = Depends(get_session)):
     return await InferenceService.get_task(session, task_id)
+
+
+@router.post("/v1/chat/completions")
+async def chat_completions(
+    payload: ChatCompletionsIn,
+    session: AsyncSession = Depends(get_session),
+):
+    """北向 OpenAI 兼容入口(a5):body.model → 端点 url_path 寻址 → OpenAI 形状响应。
+
+    刻意免鉴权(止步线 = v1.1.1):携带的 Authorization/x-api-key 头被忽略。
+    """
+    body = payload.model_dump()
+    model_name = body.pop("model", "")
+    return await InferenceService.infer_chat_completions(session, model_name, body)

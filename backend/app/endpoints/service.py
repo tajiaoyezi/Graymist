@@ -96,12 +96,51 @@ class EndpointService:
     # ---- 配额 ----
 
     @staticmethod
+    async def _external_endpoint_ids(session: AsyncSession, ids: list[str]) -> set[str]:
+        """给定端点 id 中,绑定 external-api 来源版本的那些(一次性批量 join,避免 N+1)。"""
+        if not ids:
+            return set()
+        rows = (
+            await session.execute(
+                select(EndpointVersionBindingRow.endpoint_id)
+                .join(
+                    ModelVersionRow,
+                    ModelVersionRow.id == EndpointVersionBindingRow.model_version_id,
+                )
+                .where(
+                    EndpointVersionBindingRow.endpoint_id.in_(ids),
+                    ModelVersionRow.source == "external-api",
+                )
+                .distinct()
+            )
+        ).scalars().all()
+        return set(rows)
+
+    @staticmethod
+    async def _is_external(session: AsyncSession, endpoint_id: str) -> bool:
+        """端点是否 external-api 来源(单一来源守卫保证同质,取任一绑定版本的 source)。"""
+        src = await session.scalar(
+            select(ModelVersionRow.source)
+            .join(
+                EndpointVersionBindingRow,
+                EndpointVersionBindingRow.model_version_id == ModelVersionRow.id,
+            )
+            .where(EndpointVersionBindingRow.endpoint_id == endpoint_id)
+            .limit(1)
+        )
+        return (src or "mock") == "external-api"
+
+    @staticmethod
     async def _active_usages(session: AsyncSession, exclude_id: str | None = None) -> list[dict]:
+        # D4：external-api 端点跳过资源预算、占用恒计 0、不纳入累计扣减。
         rows = (
             await session.execute(select(EndpointRow).where(EndpointRow.status.in_(_ACTIVE)))
         ).scalars().all()
+        ext = await EndpointService._external_endpoint_ids(session, [r.id for r in rows])
         return [
-            endpoint_usage(r.replicas, r.resource_quota) for r in rows if r.id != exclude_id
+            endpoint_usage(r.replicas, r.resource_quota)
+            for r in rows
+            if r.id != exclude_id and r.id not in ext
         ]
 
     @staticmethod
@@ -114,7 +153,8 @@ class EndpointService:
     # ---- 绑定校验(同一事务内) ----
 
     @staticmethod
-    async def _validate_bindings(session: AsyncSession, bindings: list) -> None:
+    async def _validate_bindings(session: AsyncSession, bindings: list) -> str:
+        """校验绑定并返回该端点的统一来源(mock / external-api)。"""
         if not bindings:
             raise BindingError("至少需要一条版本绑定")
         ids = [b.model_version_id for b in bindings]
@@ -126,6 +166,7 @@ class EndpointService:
         if sum(b.weight for b in bindings) != 100:
             raise BindingError("权重之和必须为 100")
         model_ids: set[str] = set()
+        sources: set[str] = set()
         for b in bindings:
             v = await session.get(ModelVersionRow, b.model_version_id)
             if v is None:
@@ -133,8 +174,12 @@ class EndpointService:
             if VersionStatus(v.status) != VersionStatus.ready:
                 raise BindingError("仅 ready 版本可部署")
             model_ids.add(v.model_id)
+            sources.add(v.source or "mock")
         if len(model_ids) > 1:
             raise BindingError("同一端点仅可绑定同一模型的版本")
+        if len(sources) > 1:  # a5 单一来源守卫:执行分派无歧义
+            raise BindingError("同一端点绑定来源必须一致")
+        return next(iter(sources)) if sources else "mock"
 
     # ---- 内部:同步流转 + 日志 ----
 
@@ -180,11 +225,13 @@ class EndpointService:
         )
         if dup is not None:
             raise ConflictError("url_path 已被占用")
-        await EndpointService._validate_bindings(session, payload.bindings)
+        source = await EndpointService._validate_bindings(session, payload.bindings)
         quota_dict = payload.resource_quota.model_dump()
-        # 同事务内配额累计校验(基于已提交在用端点;诚实承认 READ COMMITTED 残余竞态,见 design D4)
-        request_usage = endpoint_usage(payload.replicas, quota_dict)
-        check_within_quota(_total(), await EndpointService._active_usages(session), request_usage)
+        # external-api 端点跳过本地资源预算校验(D4:判定=平台是否管后端生命周期)。
+        if source != "external-api":
+            # 同事务内配额累计校验(基于已提交在用端点;诚实承认 READ COMMITTED 残余竞态,见 design D4)
+            request_usage = endpoint_usage(payload.replicas, quota_dict)
+            check_within_quota(_total(), await EndpointService._active_usages(session), request_usage)
 
         ep = EndpointRow(
             name=payload.name,
@@ -227,12 +274,13 @@ class EndpointService:
         cur = EndpointStatus(ep.status)
         if cur != EndpointStatus.stopped:
             assert_endpoint_transition(cur, EndpointStatus.creating)  # 非 stopped 多半非法→409
-        # 重新上线计入累计校验(排除自身)
-        check_within_quota(
-            _total(),
-            await EndpointService._active_usages(session, exclude_id=ep.id),
-            endpoint_usage(ep.replicas, ep.resource_quota),
-        )
+        # 重新上线计入累计校验(排除自身);external-api 跳过(D4)。
+        if not await EndpointService._is_external(session, ep.id):
+            check_within_quota(
+                _total(),
+                await EndpointService._active_usages(session, exclude_id=ep.id),
+                endpoint_usage(ep.replicas, ep.resource_quota),
+            )
         await EndpointService._transition_sync(session, ep, EndpointStatus.creating, op="endpoint.start")
         await EndpointService._schedule(
             session, bg_sessionmaker, ep=ep,
@@ -246,11 +294,12 @@ class EndpointService:
         cur = EndpointStatus(ep.status)
         if cur not in (EndpointStatus.running, EndpointStatus.stopped, EndpointStatus.failed):
             assert_endpoint_transition(cur, EndpointStatus.creating)  # creating 等→409
-        check_within_quota(
-            _total(),
-            await EndpointService._active_usages(session, exclude_id=ep.id),
-            endpoint_usage(ep.replicas, ep.resource_quota),
-        )
+        if not await EndpointService._is_external(session, ep.id):  # external-api 跳过(D4)
+            check_within_quota(
+                _total(),
+                await EndpointService._active_usages(session, exclude_id=ep.id),
+                endpoint_usage(ep.replicas, ep.resource_quota),
+            )
         await EndpointService._transition_sync(session, ep, EndpointStatus.creating, op="endpoint.restart")
         await EndpointService._schedule(
             session, bg_sessionmaker, ep=ep,
@@ -325,7 +374,8 @@ class EndpointService:
             )
             running = EndpointStatus(ep.status) == EndpointStatus.running
             # M2:仅当占用变化且端点在线(占额)时才重跑配额校验;stopped/failed 不占额、不校验(留待 start/restart)。
-            if occupancy_changed and running:
+            # external-api 端点跳过(D4)。
+            if occupancy_changed and running and not await EndpointService._is_external(session, ep.id):
                 check_within_quota(
                     _total(),
                     await EndpointService._active_usages(session, exclude_id=ep.id),

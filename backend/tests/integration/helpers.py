@@ -52,6 +52,40 @@ async def make_ready_version(client, model_id, **over):
     return vid
 
 
+# ---- a5：external-api 来源 ----
+
+# external-api 模型的固定 chat schema(只描述、不强校验;推理按 is_chat_like 校验)。
+CHAT_SCHEMA = {
+    "type": "object",
+    "properties": {"messages": {"type": "array"}, "system": {"type": "string"}},
+}
+
+
+def external_version_payload(**over):
+    p = {
+        "version": "v1",
+        "source": "external-api",
+        "provider": "openai",
+        "base_url": "http://mock-upstream/v1",
+        "upstream_model": "gpt-4o-mini",
+        "protocol": "openai",
+    }
+    p.update(over)
+    return p
+
+
+async def make_external_ready_version(client, model_id, **over):
+    r = await client.post(
+        f"/models/{model_id}/versions", json=external_version_payload(**over)
+    )
+    assert r.status_code == 201, r.text
+    vid = r.json()["id"]
+    for tgt in ("validating", "ready"):
+        rr = await client.post(f"/versions/{vid}/transition", json={"target": tgt})
+        assert rr.status_code == 200, rr.text
+    return vid
+
+
 def endpoint_payload(bindings, **over):
     p = {
         "name": "ep-demo",
