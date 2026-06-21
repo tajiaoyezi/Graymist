@@ -4,6 +4,7 @@ import type {
   Endpoint,
   EndpointBinding,
   InferResult,
+  InferenceLog,
   Metrics,
   Model,
   QuotaInfo,
@@ -128,6 +129,14 @@ export const api = {
   getMetrics: (endpointId: string, range: string) =>
     req<Metrics>(
       `/monitoring/metrics?endpoint_id=${encodeURIComponent(endpointId)}&range=${range}`,
+    ),
+  listInferenceLogs: (endpointId: string, p?: { status?: string; limit?: number }) =>
+    req<InferenceLog[]>(
+      `/monitoring/logs${qs({
+        endpoint_id: endpointId,
+        status: p?.status,
+        limit: p?.limit ? String(p.limit) : undefined,
+      })}`,
     ),
 };
 

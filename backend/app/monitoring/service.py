@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.errors import NotFoundError
 from app.common.schema_validation import InvalidSchemaError
-from app.db.tables import EndpointRow, InferenceLogRow
+from app.db.tables import EndpointRow, InferenceLogRow, ModelVersionRow
 from app.inference import concurrency
 from app.inference.service import ST_SUCCESS, ST_TIMEOUT
 
@@ -120,3 +120,47 @@ class MonitoringService:
         agg = aggregate(list(rows), now=now, range_key=range_key)
         agg["current_concurrency"] = concurrency.current_in_flight(endpoint_id)
         return agg
+
+    @staticmethod
+    async def list_logs(
+        session: AsyncSession,
+        endpoint_id: str,
+        *,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """逐条推理日志(按时间倒序),可按状态过滤;补出命中版本的可读版本号供 A/B 分析。"""
+        ep = await session.get(EndpointRow, endpoint_id)
+        if ep is None:
+            raise NotFoundError("端点")  # → 404
+        q = select(InferenceLogRow).where(InferenceLogRow.endpoint_id == endpoint_id)
+        if status:
+            q = q.where(InferenceLogRow.status == status)
+        q = q.order_by(InferenceLogRow.created_at.desc()).limit(limit)
+        rows = (await session.execute(q)).scalars().all()
+        vids = {r.version_id for r in rows if r.version_id}
+        labels: dict[str, str] = {}
+        if vids:
+            vrows = (
+                await session.execute(
+                    select(ModelVersionRow.id, ModelVersionRow.version).where(
+                        ModelVersionRow.id.in_(vids)
+                    )
+                )
+            ).all()
+            labels = {vid: ver for vid, ver in vrows}
+        return [
+            {
+                "id": r.id,
+                "endpoint_id": r.endpoint_id,
+                "version_id": r.version_id,
+                "version": labels.get(r.version_id) if r.version_id else None,
+                "mode": r.mode,
+                "input_summary": r.input_summary,
+                "output_summary": r.output_summary,
+                "latency_ms": r.latency_ms,
+                "status": r.status,
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ]
