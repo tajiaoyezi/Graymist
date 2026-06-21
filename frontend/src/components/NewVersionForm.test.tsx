@@ -74,4 +74,49 @@ describe("NewVersionForm", () => {
       protocol: "openai",
     });
   });
+
+  it("external-api 选 anthropic 协议:提交载荷 protocol=anthropic", async () => {
+    const onSubmit = vi.fn();
+    render(<NewVersionForm onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByTestId("nv-version"), "v1");
+    await userEvent.click(screen.getByTestId("nv-source-external-api"));
+    await userEvent.type(screen.getByTestId("nv-base-url"), "http://up/v1");
+    await userEvent.type(
+      screen.getByTestId("nv-upstream-model"),
+      "claude-3-5-sonnet",
+    );
+    await userEvent.selectOptions(screen.getByTestId("nv-protocol"), "anthropic");
+    await userEvent.click(screen.getByTestId("nv-submit"));
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      version: "v1",
+      source: "external-api",
+      protocol: "anthropic",
+    });
+  });
+
+  it("external-api 填 API Key:提交载荷含 api_key(password 输入)", async () => {
+    const onSubmit = vi.fn();
+    render(<NewVersionForm onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByTestId("nv-version"), "v1");
+    await userEvent.click(screen.getByTestId("nv-source-external-api"));
+    await userEvent.type(screen.getByTestId("nv-base-url"), "http://up/v1");
+    await userEvent.type(screen.getByTestId("nv-upstream-model"), "gpt-4o-mini");
+    await userEvent.type(screen.getByTestId("nv-api-key"), "sk-real-123");
+    await userEvent.click(screen.getByTestId("nv-submit"));
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      source: "external-api",
+      api_key: "sk-real-123",
+    });
+  });
+
+  it("external-api 不填 API Key:提交载荷不含 api_key", async () => {
+    const onSubmit = vi.fn();
+    render(<NewVersionForm onSubmit={onSubmit} />);
+    await userEvent.type(screen.getByTestId("nv-version"), "v1");
+    await userEvent.click(screen.getByTestId("nv-source-external-api"));
+    await userEvent.type(screen.getByTestId("nv-base-url"), "http://up/v1");
+    await userEvent.type(screen.getByTestId("nv-upstream-model"), "gpt-4o-mini");
+    await userEvent.click(screen.getByTestId("nv-submit"));
+    expect(onSubmit.mock.calls[0][0]).not.toHaveProperty("api_key");
+  });
 });

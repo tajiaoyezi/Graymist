@@ -209,6 +209,11 @@ export function ModelDetailPage() {
                       ? t(`framework.${v.framework}`)
                       : "—"}
                 </span>
+                {v.source === "external-api" && v.has_api_key && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md text-accent bg-surface">
+                    {t("version.keyConfigured")}
+                  </span>
+                )}
                 <span className="mono text-[11px] text-faint2">
                   {formatDateTime(v.created_at, i18n.language)}
                 </span>

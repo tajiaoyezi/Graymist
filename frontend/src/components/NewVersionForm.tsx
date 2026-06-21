@@ -17,6 +17,7 @@ export interface NewVersionInput {
   upstream_model?: string;
   protocol?: string;
   auth_ref?: string;
+  api_key?: string; // a7:平台内填写的上游 key 明文(只写入,加密存储、不回显)
   change_note: string;
   metrics?: VersionMetrics; // 选填;三项全空则不带,版本 metrics 保持 null
 }
@@ -42,6 +43,8 @@ export function NewVersionForm({
   const [provider, setProvider] = useState("openai");
   const [baseUrl, setBaseUrl] = useState("");
   const [upstreamModel, setUpstreamModel] = useState("");
+  const [protocol, setProtocol] = useState("openai");
+  const [apiKey, setApiKey] = useState("");
   const [authRef, setAuthRef] = useState("");
   // 资源需求改为结构化数字字段(原先要求手填 JSON,体验差)。
   const [cpu, setCpu] = useState("1");
@@ -71,7 +74,8 @@ export function NewVersionForm({
           provider,
           base_url: baseUrl,
           upstream_model: upstreamModel,
-          protocol: "openai",
+          protocol,
+          ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
           ...(authRef.trim() ? { auth_ref: authRef.trim() } : {}),
           change_note: changeNote,
         });
@@ -171,7 +175,22 @@ export function NewVersionForm({
           </label>
           <label className="block">
             <span className="block text-[11px] font-bold text-muted mb-1">{t("field.protocol")}</span>
-            <input data-testid="nv-protocol" value="openai" readOnly className={`${INPUT} mono opacity-70`} />
+            <select
+              data-testid="nv-protocol"
+              value={protocol}
+              onChange={(e) => setProtocol(e.target.value)}
+              className={INPUT}
+            >
+              {(["openai", "anthropic"] as const).map((p) => (
+                <option key={p} value={p}>
+                  {t(`field.protocolLabel.${p}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-[11px] font-bold text-muted mb-1">{t("field.apiKey")}</span>
+            <input type="password" data-testid="nv-api-key" placeholder={t("field.apiKeyHint")} value={apiKey} onChange={(e) => setApiKey(e.target.value)} className={`${INPUT} mono`} />
           </label>
           <label className="block">
             <span className="block text-[11px] font-bold text-muted mb-1">{t("field.authRef")}</span>

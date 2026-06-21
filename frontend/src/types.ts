@@ -40,6 +40,7 @@ export interface Version {
   upstream_model?: string | null;
   protocol?: string | null;
   auth_ref?: string | null;
+  has_api_key?: boolean; // a7:是否已在平台内加密配置上游 key(只读布尔,不含明文/密文)
   change_note: string;
   status: VersionStatus;
   metrics: VersionMetrics | null;
