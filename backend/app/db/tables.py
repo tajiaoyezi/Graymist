@@ -38,6 +38,8 @@ class ModelRow(Base):
     name: Mapped[str] = mapped_column(String(255), index=True)
     description: Mapped[str] = mapped_column(Text, default="")
     task_type: Mapped[str] = mapped_column(String(32), index=True)
+    # task_type=custom 时的用户自定义类型名(展示用);非 custom 为空。
+    custom_task_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
     input_schema: Mapped[dict] = mapped_column(_json())
     output_schema: Mapped[dict] = mapped_column(_json())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

@@ -17,6 +17,7 @@ async def create_model(payload: ModelCreate, session: AsyncSession = Depends(get
         name=payload.name,
         description=payload.description,
         task_type=payload.task_type,
+        custom_task_type=payload.custom_task_type,
         input_schema=payload.input_schema,
         output_schema=payload.output_schema,
     )

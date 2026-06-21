@@ -32,6 +32,32 @@ class TestCreateModel:
         )
         assert r.status_code == 422
 
+    async def test_custom_requires_name(self, client):
+        # WHEN task_type=custom 但缺/空 custom_task_type THEN 422
+        miss = await client.post("/models", json=model_payload(task_type="custom"))
+        assert miss.status_code == 422
+        blank = await client.post(
+            "/models", json=model_payload(task_type="custom", custom_task_type="  ")
+        )
+        assert blank.status_code == 422
+
+    async def test_custom_with_name_persisted(self, client):
+        # WHEN task_type=custom 且给名 THEN 201 且 ModelOut 回显 custom_task_type
+        r = await client.post(
+            "/models", json=model_payload(task_type="custom", custom_task_type="目标检测")
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["custom_task_type"] == "目标检测"
+
+    async def test_non_custom_drops_stray_name(self, client):
+        # WHEN 非 custom 却带了 custom_task_type THEN 忽略,落库为 null
+        r = await client.post(
+            "/models",
+            json=model_payload(task_type="classification", custom_task_type="忽略我"),
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["custom_task_type"] is None
+
 
 class TestListModels:
     async def test_filter_by_task_type(self, client):
@@ -49,6 +75,23 @@ class TestListModels:
         r = await client.get("/models", params={"q": "alpha"})
         assert r.status_code == 200
         assert [m["name"] for m in r.json()] == ["alpha classifier"]
+
+    async def test_search_matches_description_and_custom_type(self, client):
+        # 搜索覆盖 名称/描述/自定义类型名(不止名称)
+        await client.post(
+            "/models",
+            json=model_payload(
+                name="yolo-v8",
+                description="目标检测器",
+                task_type="custom",
+                custom_task_type="检测",
+            ),
+        )
+        await client.post("/models", json=model_payload(name="bert", description="文本分类"))
+        # q=检测 命中 yolo(描述/自定义类型),不命中 bert
+        assert [m["name"] for m in (await client.get("/models", params={"q": "检测"})).json()] == ["yolo-v8"]
+        # q=分类 命中 bert(描述)
+        assert [m["name"] for m in (await client.get("/models", params={"q": "分类"})).json()] == ["bert"]
 
 
 class TestModelDetailUpdateDelete:

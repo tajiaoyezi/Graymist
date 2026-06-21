@@ -1,12 +1,17 @@
 """Model 资源服务层。"""
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.common.errors import NotFoundError
+from app.common.errors import ConflictError, NotFoundError
 from app.common.schema_validation import validate_json_schema
-from app.db.tables import ModelRow, ModelVersionRow
+from app.db.tables import (
+    EndpointRow,
+    EndpointVersionBindingRow,
+    ModelRow,
+    ModelVersionRow,
+)
 from app.domain.enums import TaskType
 
 
@@ -56,6 +61,7 @@ class ModelService:
         task_type: TaskType | str,
         input_schema: dict,
         output_schema: dict,
+        custom_task_type: str | None = None,
     ) -> ModelRow:
         validate_json_schema(input_schema)
         validate_json_schema(output_schema)
@@ -63,6 +69,7 @@ class ModelService:
             name=name,
             description=description,
             task_type=_tt(task_type),
+            custom_task_type=custom_task_type,
             input_schema=input_schema,
             output_schema=output_schema,
         )
@@ -88,7 +95,15 @@ class ModelService:
         if task_type is not None:
             stmt = stmt.where(ModelRow.task_type == _tt(task_type))
         if q:
-            stmt = stmt.where(ModelRow.name.ilike(f"%{q}%"))
+            like = f"%{q}%"
+            # 搜索覆盖名称/描述/自定义类型名(卡片上展示了 custom_task_type,理应可搜)。
+            stmt = stmt.where(
+                or_(
+                    ModelRow.name.ilike(like),
+                    ModelRow.description.ilike(like),
+                    ModelRow.custom_task_type.ilike(like),
+                )
+            )
         rows = list((await session.execute(stmt)).scalars().all())
         return await ModelService._decorate(session, rows)
 
@@ -107,12 +122,38 @@ class ModelService:
             if key == "task_type":
                 value = _tt(value)
             setattr(row, key, value)
+        # 自定义类型名一致性:非 custom 不留残名。
+        if row.task_type != TaskType.custom.value:
+            row.custom_task_type = None
         await session.flush()
         return (await ModelService._decorate(session, [row]))[0]
 
     @staticmethod
     async def delete(session: AsyncSession, model_id: str) -> None:
         row = await ModelService.get(session, model_id)
+        # 守卫:若有任一端点绑定了该模型的任一版本,拒绝删除(避免孤儿化端点绑定)。
+        # 与端点状态无关——停止中的端点仍可被重启,其绑定同样不可指向已删版本。
+        # 带上冲突端点名,让用户知道是「谁」在绑(省去去管控台逐个翻)。
+        names = (
+            await session.execute(
+                select(EndpointRow.name)
+                .join(
+                    EndpointVersionBindingRow,
+                    EndpointVersionBindingRow.endpoint_id == EndpointRow.id,
+                )
+                .join(
+                    ModelVersionRow,
+                    ModelVersionRow.id == EndpointVersionBindingRow.model_version_id,
+                )
+                .where(ModelVersionRow.model_id == model_id)
+                .distinct()
+            )
+        ).scalars().all()
+        if names:
+            joined = "、".join(f"「{n}」" for n in names)
+            raise ConflictError(
+                f"模型被端点{joined}绑定，无法删除；请先将这些端点改绑到其它模型的版本"
+            )
         # 先删版本，再删模型；change_log 是 append-only 历史，保留不删。
         await session.execute(
             delete(ModelVersionRow).where(ModelVersionRow.model_id == model_id)
