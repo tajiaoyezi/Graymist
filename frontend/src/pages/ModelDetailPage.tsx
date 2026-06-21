@@ -71,7 +71,7 @@ export function ModelDetailPage() {
 
   if (error) {
     return (
-      <div data-testid="page-error" className="text-red-600">
+      <div data-testid="page-error" className="text-danger">
         {error}
       </div>
     );
@@ -123,7 +123,7 @@ export function ModelDetailPage() {
             {formatDateTime(model.created_at, i18n.language)}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2.5">
           <button
             type="button"
             data-testid="edit-model"
@@ -131,7 +131,8 @@ export function ModelDetailPage() {
               setActionError(""); // 清掉上一轮删除失败的残留红条,避免跨操作误读
               setEditOpen(true);
             }}
-            className="border border-border rounded-lg px-3 py-1.5 text-xs font-bold text-text2 bg-panel hover:bg-surface"
+            className="inline-flex items-center h-[38px] px-4 rounded-[10px] font-bold text-sm text-white hover:opacity-90 transition"
+            style={{ background: "var(--accent)" }}
           >
             {t("action.edit")}
           </button>
@@ -141,8 +142,8 @@ export function ModelDetailPage() {
             disabled={deleteBlocked}
             title={deleteBlocked ? t("models.deleteBlockedHint") : undefined}
             onClick={() => setConfirmDelete(true)}
-            className="border border-border rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ color: "#dc2626" }}
+            className="inline-flex items-center h-[38px] px-4 rounded-[10px] font-bold text-sm text-white hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "var(--danger)" }}
           >
             {t("action.delete")}
           </button>
@@ -150,7 +151,7 @@ export function ModelDetailPage() {
       </div>
 
       {actionError && (
-        <div data-testid="action-error" className="text-red-600 text-sm">
+        <div data-testid="action-error" className="text-danger text-sm">
           {actionError}
         </div>
       )}
@@ -163,24 +164,13 @@ export function ModelDetailPage() {
               <span className="font-extrabold text-sm">{t("version.list")}</span>
               <button
                 type="button"
-                className="text-accent text-[13px] font-bold"
-                onClick={() => setShowForm((v) => !v)}
+                onClick={() => setShowForm(true)}
+                className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-bold text-accent bg-accent-soft border border-border hover:opacity-80 transition"
               >
-                {t("action.newVersion")}
+                + {t("action.newVersion")}
               </button>
             </div>
-            {showForm && (
-              <div className="px-[18px] py-2">
-                <NewVersionForm
-                  onSubmit={async (body) => {
-                    await api.createVersion(modelId, body);
-                    setShowForm(false);
-                    await reload();
-                  }}
-                />
-              </div>
-            )}
-            {versions.length === 0 && !showForm && (
+            {versions.length === 0 && (
               <div data-testid="versions-empty" className="px-[18px] py-7 text-center">
                 <div className="text-faint text-[13px] mb-3 leading-relaxed">
                   {t("version.emptyGuide")}
@@ -284,6 +274,47 @@ export function ModelDetailPage() {
         </div>
       </div>
 
+      {/* 新建版本弹窗 */}
+      {showForm && (
+        <>
+          <div
+            onClick={() => setShowForm(false)}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.45)", zIndex: 90 }}
+          />
+          <div
+            role="dialog"
+            aria-label={t("action.newVersion")}
+            style={{
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%,-50%)",
+              width: 560,
+              maxWidth: "94vw",
+              maxHeight: "92vh",
+              overflowY: "auto",
+              zIndex: 91,
+              boxShadow: "0 24px 70px rgba(15,23,42,.3)",
+            }}
+            className="bg-panel rounded-2xl"
+          >
+            <div className="px-6 py-5 border-b border-border-soft font-extrabold text-base">
+              {t("action.newVersion")}
+            </div>
+            <div className="px-6 py-5">
+              <NewVersionForm
+                onSubmit={async (body) => {
+                  await api.createVersion(modelId, body);
+                  setShowForm(false);
+                  await reload();
+                }}
+                onCancel={() => setShowForm(false)}
+              />
+            </div>
+          </div>
+        </>
+      )}
+
       {/* 编辑模型弹窗(仅 name/description) */}
       {editOpen && (
         <>
@@ -326,7 +357,9 @@ export function ModelDetailPage() {
 
       <ConfirmDialog
         open={confirmDelete}
-        message={t("models.confirmDelete", { name: model.name })}
+        title={t("models.deleteTitle", { name: model.name })}
+        message={t("models.deleteBody")}
+        confirmLabel={t("action.delete")}
         onConfirm={() => {
           setConfirmDelete(false);
           void handleDelete();

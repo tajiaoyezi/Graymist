@@ -113,7 +113,7 @@ export function CreateModelForm({
     >
       <label className="block">
         <span className="text-xs font-bold text-muted">
-          {t("field.name")} <span className="text-red-600">*</span>
+          {t("field.name")} <span className="text-danger">*</span>
         </span>
         <input
           data-testid="input-name"
@@ -236,7 +236,7 @@ export function CreateModelForm({
         <div className="text-[11px] text-faint mt-1">{t("field.schemaHint")}</div>
       </label>
       {error && (
-        <div data-testid="schema-error" className="text-red-600 text-sm">
+        <div data-testid="schema-error" className="text-danger text-sm">
           {error}
         </div>
       )}

@@ -29,7 +29,7 @@ export function QuotaUsage({ quota, pending }: { quota: QuotaInfo; pending: Reso
           <div key={d} data-testid={`quota-${d}`}>
             <div className="flex justify-between text-[11px] mb-1">
               <span className="text-text2 font-bold">{t(`quota.${d}`)}</span>
-              <span className="mono" style={{ color: dimOver ? "#dc2626" : "var(--muted)" }}>
+              <span className="mono" style={{ color: dimOver ? "var(--danger)" : "var(--muted)" }}>
                 {t("quota.remaining")} {quota.remaining[d]} · {t("quota.afterDeploy")}{" "}
                 {preview[d]}
               </span>
@@ -42,7 +42,7 @@ export function QuotaUsage({ quota, pending }: { quota: QuotaInfo; pending: Reso
               <div
                 style={{
                   width: `${projPct}%`,
-                  background: dimOver ? "#dc2626" : "var(--accent)",
+                  background: dimOver ? "var(--danger)" : "var(--accent)",
                   opacity: 0.55,
                 }}
               />
@@ -51,7 +51,7 @@ export function QuotaUsage({ quota, pending }: { quota: QuotaInfo; pending: Reso
         );
       })}
       {over && (
-        <div data-testid="quota-over" className="text-red-600 text-xs">
+        <div data-testid="quota-over" className="text-danger text-xs">
           {t("quota.over")}
         </div>
       )}

@@ -346,6 +346,7 @@
 *{box-sizing:border-box;}
 :root{
   --accent:#4f46e5; --accent-soft:color-mix(in srgb, var(--accent) 13%, #fff);
+  --danger:#dc2626; --danger-soft:color-mix(in srgb, var(--danger) 13%, #fff);
   --bg:#f1f5f9; --panel:#ffffff; --surface:#f1f5f9; --surface2:#f8fafc;
   --border:#e2e8f0; --border-soft:#f1f5f9;
   --text:#0f172a; --text2:#475569; --muted:#64748b; --faint:#94a3b8; --faint2:#cbd5e1;
@@ -353,6 +354,7 @@
 }
 :root[data-theme="dark"]{
   --accent-soft:color-mix(in srgb, var(--accent) 30%, #131a2b);
+  --danger-soft:color-mix(in srgb, var(--danger) 30%, #131a2b);
   --bg:#0a0f1a; --panel:#151c2b; --surface:#1f2737; --surface2:#192030;
   --border:#2a3450; --border-soft:#232c3f;
   --text:#e9eef6; --text2:#aeb9cd; --muted:#8794aa; --faint:#717e95; --faint2:#54607a;

@@ -6,14 +6,17 @@ import {
   type ReactNode,
 } from "react";
 
-// 主题色 6 选(同原型 data-props)。第一个为默认。
+// 主题色 6 选(第一个为默认)。避开与语义色同族的色:
+// 原型玫红 #e11d48 ≈ 危险红(--danger) → 换青色 #0891b2;
+// 原型橙 #ea580c ≈ 警告琥珀(#d97706) → 换品红 #db2777。
+// 否则选中后主按钮会与"红=危险 / 橙=警告"撞色、误导语义。
 export const ACCENTS = [
   "#4f46e5",
   "#2563eb",
   "#0d9488",
   "#7c3aed",
-  "#e11d48",
-  "#ea580c",
+  "#0891b2",
+  "#db2777",
 ];
 
 export type Theme = "light" | "dark";

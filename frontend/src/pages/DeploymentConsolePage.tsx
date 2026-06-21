@@ -18,7 +18,7 @@ const STATUS: Record<string, { color: string; bg: string }> = {
   creating: { color: "#2563eb", bg: "#dbeafe" },
   running: { color: "#16a34a", bg: "#dcfce7" },
   stopped: { color: "#64748b", bg: "#f1f5f9" },
-  failed: { color: "#dc2626", bg: "#fee2e2" },
+  failed: { color: "var(--danger)", bg: "var(--danger-soft)" },
 };
 
 export function DeploymentConsolePage() {
@@ -79,7 +79,7 @@ export function DeploymentConsolePage() {
 
   if (error && !loaded) {
     return (
-      <div data-testid="page-error" className="text-red-600">
+      <div data-testid="page-error" className="text-danger">
         {error}
       </div>
     );
@@ -113,7 +113,7 @@ export function DeploymentConsolePage() {
       </div>
 
       {error && (
-        <div data-testid="action-error" className="text-red-600 text-sm">
+        <div data-testid="action-error" className="text-danger text-sm">
           {error}
         </div>
       )}

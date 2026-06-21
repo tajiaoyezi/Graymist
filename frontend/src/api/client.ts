@@ -85,6 +85,7 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(metrics),
     }),
+  deleteVersion: (id: string) => req<void>(`/versions/${id}`, { method: "DELETE" }),
   compareVersions: (modelId: string) =>
     req<{ version: string; version_id: string; metrics: VersionMetrics | null }[]>(
       `/models/${modelId}/versions/compare`,

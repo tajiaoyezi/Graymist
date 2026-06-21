@@ -179,7 +179,7 @@ export function MonitoringPage() {
         </select>
       </div>
 
-      {error && <div data-testid="mon-error" className="text-red-600 text-sm">{error}</div>}
+      {error && <div data-testid="mon-error" className="text-danger text-sm">{error}</div>}
 
       {/* metric cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 12 }}>

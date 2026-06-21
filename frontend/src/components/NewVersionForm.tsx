@@ -20,8 +20,10 @@ const INPUT =
 
 export function NewVersionForm({
   onSubmit,
+  onCancel,
 }: {
   onSubmit: (v: NewVersionInput) => void;
+  onCancel?: () => void;
 }) {
   const { t } = useTranslation();
   const [version, setVersion] = useState("");
@@ -74,10 +76,7 @@ export function NewVersionForm({
   );
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-2 border border-border-soft rounded-[12px] p-3 my-2 bg-surface2"
-    >
+    <form onSubmit={handleSubmit} className="space-y-2.5">
       <label className="block">
         <span className="block text-[11px] font-bold text-muted mb-1">
           {t("field.version")}
@@ -142,17 +141,29 @@ export function NewVersionForm({
         />
       </label>
       {error && (
-        <div data-testid="nv-error" className="text-red-600 text-sm">
+        <div data-testid="nv-error" className="text-danger text-sm">
           {error}
         </div>
       )}
-      <button
-        data-testid="nv-submit"
-        type="submit"
-        className="bg-accent text-white rounded-lg px-3 py-1.5 font-bold text-sm"
-      >
-        {t("action.create")}
-      </button>
+      <div className="flex justify-end gap-2.5 pt-1">
+        {onCancel && (
+          <button
+            type="button"
+            data-testid="nv-cancel"
+            onClick={onCancel}
+            className="border border-border rounded-lg px-3 py-1.5 font-bold text-sm text-text2 bg-panel"
+          >
+            {t("action.cancel")}
+          </button>
+        )}
+        <button
+          data-testid="nv-submit"
+          type="submit"
+          className="bg-accent text-white rounded-lg px-3 py-1.5 font-bold text-sm"
+        >
+          {t("action.create")}
+        </button>
+      </div>
     </form>
   );
 }

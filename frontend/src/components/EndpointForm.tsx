@@ -77,11 +77,22 @@ export function EndpointForm({
     setVersions(vs);
   }
 
+  // 勾选/取消版本后,把权重重置为尽量均分(和=100、每条≥1),让用户从合法的默认值出发再微调。
+  function evenSplit(bs: WeightBinding[]): WeightBinding[] {
+    const n = bs.length;
+    if (n === 0) return bs;
+    const base = Math.floor(100 / n);
+    const rem = 100 - base * n;
+    return bs.map((b, i) => ({ ...b, weight: base + (i < rem ? 1 : 0) }));
+  }
+
   function toggleVersion(v: Version, checked: boolean) {
     setBindings((prev) =>
-      checked
-        ? [...prev, { model_version_id: v.id, weight: 0, label: v.version }]
-        : prev.filter((b) => b.model_version_id !== v.id),
+      evenSplit(
+        checked
+          ? [...prev, { model_version_id: v.id, weight: 0, label: v.version }]
+          : prev.filter((b) => b.model_version_id !== v.id),
+      ),
     );
   }
 
@@ -187,7 +198,7 @@ export function EndpointForm({
       }}
     >
       {error && (
-        <div data-testid="form-error" className="text-red-600 text-sm">
+        <div data-testid="form-error" className="text-danger text-sm">
           {error}
         </div>
       )}

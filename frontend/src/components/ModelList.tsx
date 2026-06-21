@@ -141,7 +141,7 @@ export function ModelList({
       </div>
 
       {error ? (
-        <div data-testid="list-error" className="text-red-600 text-sm">
+        <div data-testid="list-error" className="text-danger text-sm">
           {t("error.load")}
         </div>
       ) : loading ? (

@@ -46,20 +46,26 @@ function renderPage() {
 }
 
 describe("EndpointFormPage", () => {
-  it("权重和≠100 阻止提交;修正为 100 后可提交", async () => {
+  it("权重联动:选两版本默认均分,调一个另一个自动补足,和恒为 100", async () => {
     renderPage();
     fireEvent.change(await screen.findByTestId("ep-model"), { target: { value: "m1" } });
     fireEvent.click(await screen.findByTestId("version-v1"));
     fireEvent.click(screen.getByTestId("version-v2"));
-    fireEvent.change(await screen.findByTestId("weight-input-v1"), { target: { value: "80" } });
-    fireEvent.change(screen.getByTestId("weight-input-v2"), { target: { value: "10" } });
+
+    // 选两个 → 默认 50/50(合法,无错误)
+    const w1 = () => screen.getByTestId("weight-input-v1") as HTMLInputElement;
+    const w2 = () => screen.getByTestId("weight-input-v2") as HTMLInputElement;
+    expect(w1().value).toBe("50");
+    expect(w2().value).toBe("50");
+    expect(screen.queryByTestId("weight-error")).toBeNull();
+
+    // 调 v1=80 → v2 自动 20,和仍 100
+    fireEvent.change(w1(), { target: { value: "80" } });
+    expect(w2().value).toBe("20");
+    expect(screen.getByTestId("weight-sum")).toHaveTextContent("100%");
+
     fireEvent.change(screen.getByTestId("ep-name"), { target: { value: "ep" } });
     fireEvent.change(screen.getByTestId("ep-url"), { target: { value: "/ep" } });
-
-    expect(screen.getByTestId("weight-error")).toBeInTheDocument();
-    expect(screen.getByTestId("submit-endpoint")).toBeDisabled();
-
-    fireEvent.change(screen.getByTestId("weight-input-v2"), { target: { value: "20" } });
     expect(screen.queryByTestId("weight-error")).toBeNull();
     expect(screen.getByTestId("submit-endpoint")).toBeEnabled();
   });

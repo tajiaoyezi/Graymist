@@ -1,19 +1,23 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { ApiError, api } from "../api/client";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { VersionActions } from "../components/VersionActions";
-import type { Model, Version } from "../types";
+import type { Endpoint, Model, Version } from "../types";
 
 const STATUS_ORDER = ["draft", "validating", "ready", "archived"] as const;
 
 export function VersionDetailPage() {
   const { t } = useTranslation();
   const { versionId = "" } = useParams();
+  const navigate = useNavigate();
   const [version, setVersion] = useState<Version | null>(null);
   const [model, setModel] = useState<Model | null>(null);
+  const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [error, setError] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [editMetrics, setEditMetrics] = useState(false);
   const [mAcc, setMAcc] = useState("");
   const [mLat, setMLat] = useState("");
@@ -25,6 +29,12 @@ export function VersionDetailPage() {
       const v = await api.getVersion(versionId);
       setVersion(v);
       setModel(await api.getModel(v.model_id));
+      try {
+        // 端点信息次要,失败不崩页(用于删除守卫:被绑定则禁用删除)。
+        setEndpoints(await api.listEndpoints());
+      } catch {
+        setEndpoints([]);
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.detail : t("error.load"));
     }
@@ -36,7 +46,7 @@ export function VersionDetailPage() {
 
   if (error && !version) {
     return (
-      <div data-testid="page-error" className="text-red-600">
+      <div data-testid="page-error" className="text-danger">
         {error}
       </div>
     );
@@ -45,6 +55,23 @@ export function VersionDetailPage() {
 
   const card = "bg-panel border border-border rounded-[14px]";
   const v = version; // 已过空值守卫,供闭包内稳定引用
+
+  // 绑定了本版本的端点 → 被绑定则禁用删除(从源头避免确认后 409)。
+  const boundEndpoints = endpoints.filter((ep) =>
+    ep.bindings.some((b) => b.model_version_id === v.id),
+  );
+  const deleteBlocked = boundEndpoints.length > 0;
+
+  async function handleDelete() {
+    try {
+      setError("");
+      await api.deleteVersion(v.id);
+      navigate(`/models/${v.model_id}`);
+    } catch (e) {
+      // 删除失败(如 409)走页底既有 action-error,不跳转。
+      setError(e instanceof ApiError ? e.detail : t("error.action"));
+    }
+  }
 
   function openMetrics() {
     setMAcc(v.metrics?.accuracy != null ? String(v.metrics.accuracy) : "");
@@ -95,10 +122,28 @@ export function VersionDetailPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2.5">
+      <Link
+        to={`/models/${model.id}`}
+        data-testid="back-to-model"
+        className="inline-block text-muted text-[13px] font-bold no-underline"
+      >
+        {t("version.backToModel", { name: model.name })}
+      </Link>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <h2 className="m-0 text-[22px] font-extrabold tracking-tight">
           {model.name} / <span className="mono">{version.version}</span>
         </h2>
+        <button
+          type="button"
+          data-testid="delete-version"
+          disabled={deleteBlocked}
+          title={deleteBlocked ? t("version.deleteBlockedHint") : undefined}
+          onClick={() => setConfirmDelete(true)}
+          className="inline-flex items-center h-[38px] px-4 rounded-[10px] font-bold text-sm text-white hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: "var(--danger)" }}
+        >
+          {t("action.delete")}
+        </button>
       </div>
       {/* 状态阶梯:高亮当前态,把 draft→validating→ready→archived 这条主线讲清楚 */}
       <div className="flex items-center gap-1.5 flex-wrap" data-testid="status-ladder">
@@ -202,7 +247,7 @@ export function VersionDetailPage() {
       </div>
 
       {error && (
-        <div data-testid="action-error" className="text-red-600 text-sm">
+        <div data-testid="action-error" className="text-danger text-sm">
           {error}
         </div>
       )}
@@ -221,6 +266,18 @@ export function VersionDetailPage() {
             setError(e instanceof ApiError ? e.detail : t("error.action"));
           }
         }}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title={t("version.deleteTitle", { version: version.version })}
+        message={t("version.deleteBody")}
+        confirmLabel={t("action.delete")}
+        onConfirm={() => {
+          setConfirmDelete(false);
+          void handleDelete();
+        }}
+        onCancel={() => setConfirmDelete(false)}
       />
     </div>
   );

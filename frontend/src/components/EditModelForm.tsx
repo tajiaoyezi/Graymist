@@ -66,7 +66,7 @@ export function EditModelForm({
         />
       </label>
       {error && (
-        <div data-testid="edit-error" className="text-red-600 text-sm">
+        <div data-testid="edit-error" className="text-danger text-sm">
           {error}
         </div>
       )}

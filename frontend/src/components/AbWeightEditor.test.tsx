@@ -31,7 +31,7 @@ describe("AbWeightEditor", () => {
     expect(screen.getByTestId("weight-error")).toBeInTheDocument();
   });
 
-  it("修改权重触发 onChange", () => {
+  it("单版本只能 100%:修改也被规整为 100", () => {
     const onChange = vi.fn();
     render(
       <AbWeightEditor
@@ -40,6 +40,26 @@ describe("AbWeightEditor", () => {
       />,
     );
     fireEvent.change(screen.getByTestId("weight-input-v1"), { target: { value: "50" } });
-    expect(onChange).toHaveBeenCalledWith([{ model_version_id: "v1", weight: 50, label: "v1" }]);
+    expect(onChange).toHaveBeenCalledWith([
+      { model_version_id: "v1", weight: 100, label: "v1" },
+    ]);
+  });
+
+  it("权重联动:调一个版本,另一个自动补足至和为 100", () => {
+    const onChange = vi.fn();
+    render(
+      <AbWeightEditor
+        bindings={[
+          { model_version_id: "v1", weight: 50, label: "v1" },
+          { model_version_id: "v2", weight: 50, label: "v2" },
+        ]}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.change(screen.getByTestId("weight-input-v1"), { target: { value: "70" } });
+    expect(onChange).toHaveBeenCalledWith([
+      { model_version_id: "v1", weight: 70, label: "v1" },
+      { model_version_id: "v2", weight: 30, label: "v2" },
+    ]);
   });
 });

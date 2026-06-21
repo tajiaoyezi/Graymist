@@ -8,6 +8,8 @@ export default {
       colors: {
         accent: "var(--accent)",
         "accent-soft": "var(--accent-soft)",
+        danger: "var(--danger)",
+        "danger-soft": "var(--danger-soft)",
         bg: "var(--bg)",
         panel: "var(--panel)",
         surface: "var(--surface)",

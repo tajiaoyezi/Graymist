@@ -282,7 +282,7 @@ export function PlaygroundPage() {
           )}
 
           {error && (
-            <div data-testid="pg-error" className="text-red-600 text-[12.5px] mb-3">
+            <div data-testid="pg-error" className="text-danger text-[12.5px] mb-3">
               {error}
             </div>
           )}
