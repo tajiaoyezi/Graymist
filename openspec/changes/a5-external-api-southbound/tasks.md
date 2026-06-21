@@ -52,6 +52,6 @@
 
 - [x] 9.1 后端 `pytest`(从 `backend/` 跑)全绿:含 external 同步/异步、北向路由、配额跳过、单一来源、来源派发校验 + **a3 整套回归不变**
 - [x] 9.2 前端 `tsc --noEmit` 无错、`vitest` 全绿
-- [ ] 9.3 手动/E2E 冒烟(`upstream_mock=True`):建 external-api 模型+版本+端点 → Playground chat 发送看到确定性结果+延迟+usage;`POST /v1/chat/completions`(body `model`=url_path)返回 OpenAI 形状体
+- [x] 9.3 E2E 冒烟(`upstream_mock=True`,真实 uvicorn@8021 + vite@5175):建 external-api 模型+版本+端点→running;`/endpoints/{id}/infer` 回 `echo:...`+延迟+usage{2/3/5};`POST /v1/chat/completions`(body `model`=url_path)回 OpenAI 形状体+usage;`/quota` external 计 0。前端↔后端 `/api` proxy 实证返回 running 端点;Playground UI 由 vitest 覆盖(逐像素浏览器点击受环境无 Nyx browser 限制未跑)
 - [x] 9.4 `openspec validate a5-external-api-southbound --strict` 通过;确认未超纲(无 Anthropic 南向/鉴权/成本聚合/SSE/LLM 指标)
-- [ ] 9.5 sync/archive 时同步重写 `inference-api`/`endpoint-deployment` 的 Purpose 段(v1.0 mock-only/禁 external 措辞 → mock 模拟 / external 真转发二选一)
+- [x] 9.5 sync/archive 时同步重写 `inference-api`/`endpoint-deployment`/`web-ui` 的 Purpose 段(v1.0 mock-only/禁 external 措辞 → mock 模拟 / external 真转发二选一)
