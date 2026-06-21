@@ -2,7 +2,7 @@
 
 ## Purpose
 
-平台的推理调用契约 —— 同步/异步推理、推理输入 Schema 校验、A/B 权重路由与实际命中记录、每端点并发限流(同步 429 / 异步排队)、推理日志。对应原始需求 §4.3 / 2.3,由 `a3-inference-api` 引入;`a5-external-api-southbound` 增 external-api 南向接入与真实数据流。推理执行**按命中版本 `source` 派发**:`mock` 来源为模拟(`sleep` 计时 + 按 `output_schema` 生成占位结果,行为与 v1.0 一致);`external-api` 来源为**真实转发上游**(httpx,返回真结果/真延迟/真 token 用量,v1.1 上游对接可由内置打桩提供)。另含 canonical 内核 + OpenAI 南向适配器、北向 OpenAI 兼容寻址(`/v1/chat/completions`)、推理 usage 记录。external-api 已于 v1.1 定档解禁;仍不含流式 SSE、用量聚合/成本计价、token/LLM 专属指标、Anthropic 协议、调用方鉴权/按调用方限流、local-engine/uploaded-file 来源(分属 v1.1.1 / v1.1.2 / v1.2 / v2.0)。仅 `running` 端点可推理。
+平台的推理调用契约 —— 同步/异步推理、推理输入 Schema 校验、A/B 权重路由与实际命中记录、每端点并发限流(同步 429 / 异步排队)、推理日志。对应原始需求 §4.3 / 2.3,由 `a3-inference-api` 引入;`a5-external-api-southbound` 增 external-api 南向接入与真实数据流,`a6-anthropic-southbound` 增 Anthropic 南向适配器(南向双协议齐备)。推理执行**按命中版本 `source` 派发**:`mock` 来源为模拟(`sleep` 计时 + 按 `output_schema` 生成占位结果,行为与 v1.0 一致);`external-api` 来源为**真实转发上游**(httpx,返回真结果/真延迟/真 token 用量,v1.1 上游对接可由内置打桩提供)。另含 canonical 内核 + OpenAI/Anthropic 南向适配器、北向 OpenAI 兼容寻址(`/v1/chat/completions`)、推理 usage 记录。external-api 已于 v1.1 定档解禁;仍不含流式 SSE、用量聚合/成本计价、token/LLM 专属指标、**北向 Anthropic 入口**、调用方鉴权/按调用方限流、local-engine/uploaded-file 来源(分属 v1.1.1 / v1.1.2 / v1.2 / v2.0)。仅 `running` 端点可推理。
 
 ## Requirements
 
@@ -114,17 +114,33 @@
 - **WHEN** external-api 推理的上游往返耗时超过端点 `timeout_ms`
 - **THEN** 平台以超时(504)返回而非正常结果,并写入一条状态为超时的推理日志
 
-### Requirement: canonical 内核与 OpenAI 南向适配器
+### Requirement: canonical 内核与南向协议适配器
 
-平台 SHALL 以一套与协议无关的 **canonical 表示**(统一 chat 请求/结果 + 统一 usage)承载执行层的 Schema 校验、A/B、日志与指标;南向(消费上游)协议适配通过**适配器**完成,适配器在 canonical 与具体上游 wire 格式之间双向转换。本 change MUST 提供 **OpenAI 兼容**南向适配器;适配器接口 MUST 设计为可加挂(后续 Anthropic 等为纯新增,不改 canonical 内核,即 N+M 而非 N×M)。usage MUST 归一化(`input/output_tokens ↔ prompt/completion_tokens`)。请求解析 MUST 把首条 `role:"system"` 消息提取为 canonical 的顶层 `system` 字段。
+平台 SHALL 以一套与协议无关的 **canonical 表示**(统一 chat 请求/结果 + 统一 usage)承载执行层的 Schema 校验、A/B、日志与指标;南向(消费上游)协议适配通过**适配器**完成,适配器在 canonical 与具体上游 wire 格式之间双向转换。平台 MUST 同时提供 **OpenAI 兼容**与 **Anthropic 兼容**两个南向适配器;新增协议 MUST 为纯加挂(新增一个适配器 + 一行注册),不改 canonical 内核(即 N+M 而非 N×M)。usage MUST 归一化(`input/output_tokens ↔ prompt/completion_tokens`)。请求解析 MUST 把首条 `role:"system"` 消息提取为 canonical 的顶层 `system` 字段。Anthropic 适配器 MUST 把 canonical 顶层 `system` 映射为 Anthropic 请求体的顶层 `system` 字段、MUST 为 Anthropic 必填的 `max_tokens` 取值(canonical 未给时用平台默认值),并把响应 `content` 数组中 `type=="text"` 的文本块拼接所得文本、`stop_reason` 与 `usage.input_tokens/output_tokens` 解析回 canonical(`content` 是 block 数组,首块不保证是 text,MUST NOT 硬取 `content[0]`)。上游鉴权头 MUST 按协议派发(OpenAI=`Authorization: Bearer`;Anthropic=`x-api-key` + `anthropic-version`),密钥仍以 `auth_ref` 引用持有,mock 上游下 MUST NOT 解析真密钥。
 
 #### Scenario: OpenAI 适配器双向转换
 - **WHEN** 一个 canonical chat 请求经 OpenAI 南向适配器发往上游、上游返回 OpenAI 形状响应
 - **THEN** 适配器把 canonical 转为 OpenAI 请求体(含 `model`/`messages`/可选 `max_tokens`),并把响应的 `choices[0].message.content` 与 `usage.prompt_tokens/completion_tokens` 解析回 canonical(归一为 `input_tokens/output_tokens`)
 
+#### Scenario: Anthropic 适配器双向转换
+- **WHEN** 一个 canonical chat 请求经 Anthropic 南向适配器发往上游、上游返回 Anthropic 形状响应
+- **THEN** 适配器把 canonical 转为 Anthropic 请求体(`/messages` 路径、顶层 `system` 字段、必填 `max_tokens`、`messages`),并把响应 `content` 中 `type=="text"` 文本块拼接所得文本、`stop_reason` 与 `usage.input_tokens/output_tokens` 解析回 canonical
+
+#### Scenario: 鉴权头按协议派发
+- **WHEN** 平台向上游发起 OpenAI 协议或 Anthropic 协议的请求(非 mock 且 `auth_ref` 指向的密钥存在)
+- **THEN** OpenAI 协议注入 `Authorization: Bearer <key>`,Anthropic 协议注入 `x-api-key: <key>` 并带 `anthropic-version` 头
+
 #### Scenario: 不支持的协议被拒绝
-- **WHEN** 某 external-api 版本声明的 `protocol` 在本 change 尚不支持(非 `openai`)
+- **WHEN** 某 external-api 版本声明的 `protocol` 不在受支持集合 `{openai, anthropic}` 内
 - **THEN** 平台以清晰错误拒绝该推理,不发往上游
+
+#### Scenario: 打桩上游按协议提供 wire
+- **WHEN** 在内置打桩上游(`upstream_mock=True`)下分别命中 OpenAI 与 Anthropic 协议的 external-api 版本
+- **THEN** 打桩上游按请求路径分别返回 OpenAI 形状(`/chat/completions`)与 Anthropic 形状(`/messages`)的确定性响应,使无密钥/无网络下两种协议均可端到端成功
+
+#### Scenario: 北向 OpenAI 入口经 Anthropic 南向转发(N+M 跨协议)
+- **WHEN** 北向 `POST /v1/chat/completions` 寻址到一个绑定了 `protocol=anthropic` 的 external-api 端点
+- **THEN** 平台以 OpenAI-in → canonical → Anthropic-out 路径转发上游,并以 OpenAI 形状返回响应(usage 经 canonical 归一),北向暴露形态不因南向协议而改变
 
 ### Requirement: 北向 OpenAI 兼容寻址
 
