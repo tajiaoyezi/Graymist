@@ -39,6 +39,39 @@ async def test_mock_version_requires_file_path_422(client):
     assert r.status_code == 422, r.text
 
 
+async def test_create_external_version_anthropic(client):
+    mid = await make_model(client, input_schema=CHAT_SCHEMA, output_schema={})
+    r = await client.post(
+        f"/models/{mid}/versions",
+        json={
+            "version": "v1",
+            "source": "external-api",
+            "provider": "anthropic",
+            "base_url": "http://up",
+            "upstream_model": "claude-3-5-sonnet",
+            "protocol": "anthropic",
+        },
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["protocol"] == "anthropic"
+
+
+async def test_external_version_unsupported_protocol_422(client):
+    mid = await make_model(client, input_schema=CHAT_SCHEMA, output_schema={})
+    r = await client.post(
+        f"/models/{mid}/versions",
+        json={
+            "version": "v1",
+            "source": "external-api",
+            "provider": "x",
+            "base_url": "http://up",
+            "upstream_model": "m",
+            "protocol": "cohere",  # 非 {openai, anthropic}
+        },
+    )
+    assert r.status_code == 422, r.text
+
+
 async def test_mock_version_unchanged(client):
     # 既有 mock 版本创建路径不变(回归)。
     mid = await make_model(client)

@@ -27,6 +27,8 @@ class VersionCreate(BaseModel):
     upstream_model: str | None = None
     protocol: str | None = None
     auth_ref: str | None = None
+    # a7：平台内填写的上游 API Key 明文（只写入,绝不回包）;服务层加密后存 auth_secret_enc。
+    api_key: str | None = None
     change_note: str = ""
     # 创建时可选带上性能指标(选填);未填则保持 null,后续仍可在版本详情页补录。
     metrics: MetricsIn | None = None
@@ -39,8 +41,8 @@ class VersionCreate(BaseModel):
             if missing:
                 raise ValueError(f"external-api 版本必填: {', '.join(missing)}")
             self.protocol = self.protocol or "openai"
-            if self.protocol != "openai":
-                raise ValueError("a5 仅支持 protocol=openai")
+            if self.protocol not in ("openai", "anthropic"):
+                raise ValueError("external-api 仅支持 protocol ∈ {openai, anthropic}")
             self.file_path = None
             self.framework = None
         elif self.source == "mock":
@@ -55,6 +57,12 @@ class VersionCreate(BaseModel):
 
 class VersionTransition(BaseModel):
     target: VersionStatus
+
+
+class CredentialIn(BaseModel):
+    """a7：设置/轮换/清除某 external-api 版本的上游 API Key(明文只写入,传空/null 清除)。"""
+
+    api_key: str | None = None
 
 
 class VersionOut(BaseModel):
@@ -72,6 +80,8 @@ class VersionOut(BaseModel):
     upstream_model: str | None = None
     protocol: str | None = None
     auth_ref: str | None = None
+    # a7：是否已配置上游凭证(只暴露布尔,绝不回显明文/密文)。
+    has_api_key: bool = False
     change_note: str
     status: VersionStatus
     metrics: dict | None

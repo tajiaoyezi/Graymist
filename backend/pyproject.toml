@@ -14,6 +14,8 @@ dependencies = [
     "redis>=5.0",
     # a5：external-api 南向接入,生产推理路径用 httpx 转发上游（原仅 dev 依赖）。
     "httpx>=0.27",
+    # a7：上游凭证加密存储（Fernet 对称加密）。
+    "cryptography>=43",
     # 生产环境数据库驱动（PostgreSQL）。测试用 aiosqlite，见 [dev]。
     "asyncpg>=0.29; platform_python_implementation == 'CPython'",
 ]

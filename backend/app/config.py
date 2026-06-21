@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # 接真上游时翻转为 False。整体往返超时走端点 timeout_ms（asyncio.wait_for），此处仅 httpx 连接级兜底。
     upstream_mock: bool = True
     upstream_connect_timeout_seconds: float = 30.0
+    # a7：上游凭证加密主密钥（Fernet key）。为空则平台内不加密存 key,只能用 auth_ref 环境变量引用。
+    secret_key: str = ""
 
 
 settings = Settings()

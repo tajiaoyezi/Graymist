@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common import change_log
+from app.common.crypto import encrypt_secret
 from app.common.errors import ConflictError, NotFoundError
 from app.db.tables import EndpointRow, EndpointVersionBindingRow, ModelVersionRow
 from app.domain.enums import Framework, VersionStatus
@@ -34,8 +35,14 @@ class VersionService:
         auth_ref: str | None = None,
         change_note: str = "",
         metrics: dict | None = None,
+        api_key: str | None = None,
     ) -> ModelVersionRow:
         await ModelService.get(session, model_id)  # 模型不存在 → 404
+        # a7：external-api 版本若带明文 API Key,加密后存(未配主密钥 →
+        # SecretKeyNotConfiguredError/400,且发生在任何写库之前,不落明文)。
+        auth_secret_enc = (
+            encrypt_secret(api_key) if (source == "external-api" and api_key) else None
+        )
         row = ModelVersionRow(
             model_id=model_id,
             version=version,
@@ -48,6 +55,7 @@ class VersionService:
             upstream_model=upstream_model,
             protocol=protocol,
             auth_ref=auth_ref,
+            auth_secret_enc=auth_secret_enc,
             change_note=change_note,
             status=VersionStatus.draft.value,
             metrics=metrics,  # 选填;None 表示创建时未填指标(与 set_metrics 后补一致)
@@ -101,6 +109,18 @@ class VersionService:
             before={"status": current.value},
             after={"status": tgt.value},
         )
+        return row
+
+    @staticmethod
+    async def set_credential(
+        session: AsyncSession, *, version_id: str, api_key: str | None
+    ) -> ModelVersionRow:
+        # a7：设置/轮换/清除上游 API Key(仅 external-api;明文加密后存,传空清除)。
+        row = await VersionService.get(session, version_id)  # 404
+        if (row.source or "mock") != "external-api":
+            raise ConflictError("仅 external-api 版本可配置上游凭证")
+        row.auth_secret_enc = encrypt_secret(api_key) if api_key else None
+        await session.flush()
         return row
 
     @staticmethod

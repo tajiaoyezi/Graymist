@@ -43,3 +43,6 @@ class OpenAIAdapter:
         return CanonicalChatResult(
             content=content, finish_reason=finish, usage=usage, raw=body
         )
+
+    def auth_headers(self, key: str) -> dict:
+        return {"Authorization": f"Bearer {key}"}

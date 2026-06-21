@@ -9,6 +9,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
+from app.common.crypto import SecretKeyNotConfiguredError
 from app.common.errors import BindingError, ConflictError, NotFoundError
 from app.common.health import redis_ping
 from app.common.quota import QuotaExceededError
@@ -98,6 +99,11 @@ def create_app() -> FastAPI:
     async def _upstream_error(request: Request, exc: UpstreamError):
         # a5:external-api 上游非 2xx / 响应不可解析 → 502。
         return JSONResponse(status_code=502, content={"detail": str(exc)})
+
+    @app.exception_handler(SecretKeyNotConfiguredError)
+    async def _no_secret_key(request: Request, exc: SecretKeyNotConfiguredError):
+        # a7：平台未配置主密钥而试图加密保存上游 key → 400(可操作的清晰提示)。
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     @app.exception_handler(IntegrityError)
     async def _integrity(request: Request, exc: IntegrityError):

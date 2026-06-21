@@ -3,7 +3,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_session
-from app.versions.schemas import MetricsIn, VersionCreate, VersionOut, VersionTransition
+from app.versions.schemas import (
+    CredentialIn,
+    MetricsIn,
+    VersionCreate,
+    VersionOut,
+    VersionTransition,
+)
 from app.versions.service import VersionService
 
 router = APIRouter(tags=["versions"])
@@ -28,6 +34,7 @@ async def create_version(
         auth_ref=payload.auth_ref,
         change_note=payload.change_note,
         metrics=payload.metrics.model_dump() if payload.metrics else None,
+        api_key=payload.api_key,
     )
 
 
@@ -63,6 +70,16 @@ async def set_metrics(
 ):
     return await VersionService.set_metrics(
         session, version_id=version_id, metrics=payload.model_dump()
+    )
+
+
+@router.put("/versions/{version_id}/credential", response_model=VersionOut)
+async def set_credential(
+    version_id: str, payload: CredentialIn, session: AsyncSession = Depends(get_session)
+):
+    # a7：设置/轮换/清除上游 API Key(明文只写入,响应仅 has_api_key、不回显)。
+    return await VersionService.set_credential(
+        session, version_id=version_id, api_key=payload.api_key
     )
 
 

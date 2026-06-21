@@ -24,7 +24,8 @@ def reset() -> None:
 
 
 def _default_mock_handler(request: httpx.Request) -> httpx.Response:
-    """内置假 OpenAI server:回声最后一条 user 消息 + 确定性 usage(同 wire 格式)。"""
+    """内置假上游:回声最后一条 user 消息 + 确定性 usage。按请求路径派发 wire:
+    `/messages` → Anthropic 形状;其余(`/chat/completions`)→ OpenAI 形状(字节不变)。"""
     try:
         body = json.loads(request.content)
     except Exception:
@@ -38,6 +39,19 @@ def _default_mock_handler(request: httpx.Request) -> httpx.Response:
     content = f"echo: {last_user}"
     prompt_tokens = sum(len(str(m.get("content", "")).split()) for m in messages if isinstance(m, dict))
     completion_tokens = len(content.split())
+    if request.url.path.endswith("/messages"):
+        # Anthropic:system 在顶层、不计入 messages,故显式并入 input 计数(两路计法一致)。
+        prompt_tokens += len(str(body.get("system", "")).split())
+        resp = {
+            "id": "msg-mock",
+            "type": "message",
+            "role": "assistant",
+            "model": body.get("model", "mock"),
+            "content": [{"type": "text", "text": content}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": prompt_tokens, "output_tokens": completion_tokens},
+        }
+        return httpx.Response(200, json=resp)
     resp = {
         "id": "chatcmpl-mock",
         "object": "chat.completion",

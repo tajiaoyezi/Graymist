@@ -69,6 +69,8 @@ class ModelVersionRow(Base):
     upstream_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     protocol: Mapped[str | None] = mapped_column(String(16), nullable=True)  # a5 仅 openai
     auth_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # a7：平台内加密存储的上游 API Key 密文（Fernet）;明文永不持久化/回显。
+    auth_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     resource_req: Mapped[dict] = mapped_column(_json(), default=dict)
     change_note: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(32), default=VersionStatus.draft.value)
@@ -80,6 +82,11 @@ class ModelVersionRow(Base):
     @property
     def deployable(self) -> bool:
         return is_deployable(VersionStatus(self.status))
+
+    @property
+    def has_api_key(self) -> bool:
+        # a7：是否已在平台内加密配置上游 API Key;永不暴露明文/密文。
+        return self.auth_secret_enc is not None
 
 
 class EndpointRow(Base):

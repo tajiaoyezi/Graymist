@@ -181,3 +181,72 @@ async def test_external_ab_hit_routes_to_chosen_upstream(infer_client, monkeypat
     assert resp.status_code == 200, resp.text
     assert resp.json()["version_id"] == v1
     assert resp.json()["result"] == "from:model-a"
+
+
+# ---- a6：Anthropic 南向变体(打桩上游按 /messages 路径回 Anthropic 形状) ----
+
+
+async def _external_anthropic_running(c, url_path="/chat/ant", **ep_over):
+    mid = await make_model(c.client, input_schema=CHAT_SCHEMA, output_schema={})
+    vid = await make_external_ready_version(c.client, mid, protocol="anthropic")
+    r = await c.client.post(
+        "/endpoints",
+        json=endpoint_payload(
+            [{"model_version_id": vid, "weight": 100}], url_path=url_path, **ep_over
+        ),
+    )
+    assert r.status_code == 201, r.text
+    eid = r.json()["id"]
+    await c.drain()
+    return eid, vid
+
+
+async def test_external_anthropic_sync_success_real_usage(infer_client, db_session):
+    c = infer_client
+    eid, vid = await _external_anthropic_running(c)
+    r = await c.client.post(f"/endpoints/{eid}/infer", json=CHAT_INPUT)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["version_id"] == vid
+    assert body["result"] == "echo: hi there"  # Anthropic 形状经 parse_response 拼接 text block
+    assert body["usage"]["total_tokens"] > 0
+    rows = (
+        await db_session.execute(
+            select(InferenceLogRow).where(
+                InferenceLogRow.endpoint_id == eid, InferenceLogRow.status == "success"
+            )
+        )
+    ).scalars().all()
+    assert rows and rows[0].total_tokens and rows[0].total_tokens > 0
+
+
+async def test_external_anthropic_no_key_still_runs(infer_client):
+    c = infer_client
+    eid, _ = await _external_anthropic_running(c)
+    r = await c.client.post(f"/endpoints/{eid}/infer", json=CHAT_INPUT)
+    assert r.status_code == 200, r.text
+
+
+async def test_external_anthropic_upstream_5xx_502(infer_client, monkeypatch):
+    c = infer_client
+    eid, _ = await _external_anthropic_running(c)
+    monkeypatch.setattr(
+        http_client,
+        "_transport_override",
+        httpx.MockTransport(lambda req: httpx.Response(500, json={"error": "boom"})),
+    )
+    r = await c.client.post(f"/endpoints/{eid}/infer", json=CHAT_INPUT)
+    assert r.status_code == 502, r.text
+
+
+async def test_external_anthropic_timeout_504(infer_client, monkeypatch):
+    c = infer_client
+    eid, _ = await _external_anthropic_running(c, timeout_ms=10)
+
+    async def _slow(*a, **k):
+        await asyncio.sleep(0.1)
+        return 200, {}
+
+    monkeypatch.setattr(http_client, "post_upstream", _slow)
+    r = await c.client.post(f"/endpoints/{eid}/infer", json=CHAT_INPUT)
+    assert r.status_code == 504, r.text

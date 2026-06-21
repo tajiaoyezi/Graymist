@@ -1,4 +1,8 @@
 """北向 OpenAI 兼容寻址集成测试(a5,§12/§21)。model→url_path,OpenAI 形状,免鉴权。"""
+import httpx
+
+from app.inference import http_client
+
 from .helpers import (
     CHAT_SCHEMA,
     endpoint_payload,
@@ -71,6 +75,50 @@ async def test_chat_completions_ignores_auth_header(infer_client):
         headers={"Authorization": "Bearer fake-caller-key"},
     )
     assert r.status_code == 200, r.text
+
+
+async def test_chat_completions_anthropic_southbound_nplusm(infer_client, monkeypatch):
+    # N+M:北向 OpenAI-in → canonical → Anthropic-out。北向零改动,响应仍 OpenAI 形状。
+    c = infer_client
+    mid = await make_model(c.client, input_schema=CHAT_SCHEMA, output_schema={})
+    vid = await make_external_ready_version(c.client, mid, protocol="anthropic")
+    r = await c.client.post(
+        "/endpoints",
+        json=endpoint_payload(
+            [{"model_version_id": vid, "weight": 100}], url_path="/chat/ant-nb"
+        ),
+    )
+    assert r.status_code == 201, r.text
+    await c.drain()
+
+    seen = {}
+
+    def _capture(req):
+        seen["path"] = req.url.path
+        seen["headers"] = dict(req.headers)
+        # 必须回 Anthropic 形状,否则 AnthropicAdapter.parse_response → 502。
+        return httpx.Response(
+            200,
+            json={
+                "content": [{"type": "text", "text": "echo: hi"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 2, "output_tokens": 3},
+            },
+        )
+
+    monkeypatch.setattr(http_client, "_transport_override", httpx.MockTransport(_capture))
+    r = await c.client.post(
+        "/v1/chat/completions",
+        json={"model": "/chat/ant-nb", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["object"] == "chat.completion"  # 北向仍 OpenAI 形状
+    assert body["choices"][0]["message"]["content"] == "echo: hi"
+    assert body["usage"]["total_tokens"] == 5  # input+output 归一
+    # 判别断言:确实走了 Anthropic 南向(否则绑错适配器回退 OpenAI 也会绿)。
+    assert seen["path"].endswith("/messages")
+    assert "anthropic-version" in seen["headers"]
 
 
 async def test_chat_completions_mock_endpoint_falls_through_to_schema(infer_client):

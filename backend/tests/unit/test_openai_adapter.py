@@ -45,6 +45,13 @@ def test_parse_response_malformed_raises_upstream_error():
         adapter.parse_response(200, {"unexpected": True})
 
 
+def test_openai_auth_headers_bearer():
+    assert adapters.get_adapter("openai").auth_headers("sk-x") == {
+        "Authorization": "Bearer sk-x"
+    }
+
+
 def test_get_adapter_unsupported_protocol():
+    # a6 起 anthropic 已受支持;反例改用仍不支持的协议。
     with pytest.raises(InferenceInputInvalidError):
-        adapters.get_adapter("anthropic")
+        adapters.get_adapter("cohere")
