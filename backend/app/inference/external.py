@@ -23,8 +23,10 @@ def _resolve_key(version_row: ModelVersionRow) -> str | None:
         try:
             return crypto.decrypt_secret(version_row.auth_secret_enc)
         except Exception:
-            # 解密失败(主密钥丢失/被换)→ 不注入(请求照发,上游 401 使问题可见),不崩 500。
+            # 解密失败(主密钥丢失/被换)→ 对齐 D5:return None,不静默回退到 auth_ref,
+            # 让上游 401 暴露「存储凭证已不可解」这一运维问题(请求照发、不崩 500)。
             logger.warning("上游凭证解密失败,跳过注入: version=%s", version_row.id)
+            return None
     if version_row.auth_ref:
         return os.environ.get(version_row.auth_ref)
     return None

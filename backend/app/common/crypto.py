@@ -20,7 +20,13 @@ def _fernet() -> Fernet:
     key = settings.secret_key
     if not key:
         raise SecretKeyNotConfiguredError()
-    return Fernet(key.encode() if isinstance(key, str) else key)
+    try:
+        return Fernet(key.encode() if isinstance(key, str) else key)
+    except ValueError as e:
+        # 主密钥非空但非法 Fernet key(长度/base64 不对)→ 归一为清晰 4xx,而非 500。
+        raise SecretKeyNotConfiguredError(
+            "GRAYMIST_SECRET_KEY 非法(须为 Fernet.generate_key() 生成的 key)"
+        ) from e
 
 
 def encrypt_secret(plaintext: str) -> str:

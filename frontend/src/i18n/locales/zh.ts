@@ -241,7 +241,7 @@ export const zh = {
     protocol: "协议",
     protocolLabel: { openai: "OpenAI", anthropic: "Anthropic" },
     apiKey: "API Key(可选)",
-    apiKeyHint: "直接在平台填上游密钥;加密存储、永不回显。留空则用下方凭证引用",
+    apiKeyHint: "直接在平台填上游密钥;加密存储、永不回显。留空则用下方凭证引用。注:mock 模式下不会真用此 key,真实调用需 upstream_mock=false",
     authRef: "凭证引用(环境变量名,可选)",
     authRefHint: "如 GRAYMIST_UPSTREAM_KEY_OPENAI;留空则无鉴权(mock 上游无需)",
     externalChatModel: "external-api(chat)模型:预填只读 chat Schema",

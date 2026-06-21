@@ -21,6 +21,13 @@ def test_encrypt_without_master_key_raises(monkeypatch):
         crypto.encrypt_secret("x")
 
 
+def test_encrypt_with_malformed_master_key_raises(monkeypatch):
+    # 主密钥非空但非法 Fernet key → 清晰 SecretKeyNotConfiguredError(→400),而非 ValueError/500。
+    monkeypatch.setattr(settings, "secret_key", "not-a-valid-fernet-key")
+    with pytest.raises(SecretKeyNotConfiguredError):
+        crypto.encrypt_secret("x")
+
+
 def test_tampered_ciphertext_fails(monkeypatch):
     monkeypatch.setattr(settings, "secret_key", Fernet.generate_key().decode())
     token = crypto.encrypt_secret("hello")

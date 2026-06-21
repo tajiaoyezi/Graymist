@@ -6,6 +6,8 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
@@ -58,6 +60,16 @@ def create_app() -> FastAPI:
     @app.exception_handler(RecursionError)
     async def _too_nested(request: Request, exc: RecursionError):
         return JSONResponse(status_code=400, content={"detail": "请求结构过于嵌套"})
+
+    @app.exception_handler(RequestValidationError)
+    async def _validation_error(request: Request, exc: RequestValidationError):
+        # a7 安全:默认 422 处理器会把每条 error 的 input(=整个提交体,可能含明文 API Key)
+        # 序列化进响应。此处只回 type/loc/msg,剥离 input/ctx,杜绝凭证经 422 响应回显。
+        safe = [
+            {k: v for k, v in err.items() if k in ("type", "loc", "msg")}
+            for err in exc.errors()
+        ]
+        return JSONResponse(status_code=422, content={"detail": jsonable_encoder(safe)})
 
     @app.exception_handler(NotFoundError)
     async def _not_found(request: Request, exc: NotFoundError):
