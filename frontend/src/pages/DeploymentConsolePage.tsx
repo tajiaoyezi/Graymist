@@ -16,6 +16,9 @@ const STATUS: Record<string, { color: string; bg: string }> = {
   failed: { color: "var(--danger)", bg: "var(--danger-soft)" },
 };
 
+// A/B 灰度槽位标签(按绑定顺序);超出 8 个回落到序号。
+const AB_LABELS = "ABCDEFGH";
+
 export function DeploymentConsolePage() {
   const { t } = useTranslation();
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
@@ -227,8 +230,48 @@ export function DeploymentConsolePage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-3.5 py-3 mono text-[11px]" style={{ color: "#7c3aed" }}>
-                        {ep.bindings.map((b) => `${b.model_version_id}:${b.weight}%`).join("  ")}
+                      <td className="px-3.5 py-3 text-[11.5px]">
+                        {ep.model_name && (
+                          <div className="font-bold text-text2 mb-1.5">{ep.model_name}</div>
+                        )}
+                        {(() => {
+                          const ab = ep.bindings.length > 1; // 多版本 = A/B 灰度,单版本不显权重/进度条
+                          return (
+                            <div className="space-y-1">
+                              {ep.bindings.map((b, i) => (
+                                <div key={b.model_version_id} className="flex items-center gap-2">
+                                  {ab && (
+                                    <span
+                                      className="inline-flex items-center justify-center w-[15px] h-[15px] rounded text-[9px] font-extrabold shrink-0"
+                                      style={{ background: "var(--accent-soft)", color: "var(--accent)" }}
+                                    >
+                                      {AB_LABELS[i] ?? i + 1}
+                                    </span>
+                                  )}
+                                  <span className="mono text-[11px] px-1.5 py-0.5 rounded border border-border bg-surface text-text2">
+                                    {b.version ?? b.model_version_id}
+                                  </span>
+                                  {ab && (
+                                    <>
+                                      <div
+                                        className="h-1.5 rounded-full overflow-hidden shrink-0"
+                                        style={{ width: 54, background: "var(--surface)" }}
+                                      >
+                                        <div
+                                          className="h-full rounded-full"
+                                          style={{ width: `${b.weight}%`, background: "var(--accent)" }}
+                                        />
+                                      </div>
+                                      <span className="mono text-[11px] font-bold text-text2 tabular-nums w-9 text-right">
+                                        {b.weight}%
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-3.5 py-3 mono text-text2 text-[11.5px]">
                         {t("endpoint.replicas")} {ep.replicas} · {t("quota.cpu")}{" "}

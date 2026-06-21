@@ -47,6 +47,7 @@ export interface ResourceQuota {
 export interface EndpointBinding {
   model_version_id: string;
   weight: number;
+  version?: string; // 后端补的可读版本号(仅响应有;创建/更新入参省略)
 }
 
 export interface Endpoint {
@@ -58,6 +59,7 @@ export interface Endpoint {
   resource_quota: ResourceQuota;
   timeout_ms: number;
   max_concurrency: number;
+  model_name?: string | null; // 所属模型名(后端补;仅响应有)
   bindings: EndpointBinding[];
   created_at: string;
 }
@@ -87,6 +89,20 @@ export interface AsyncTask {
   result: unknown | null;
   created_at: string;
   finished_at: string | null;
+}
+
+// a4 推理日志(逐条调用记录)
+export interface InferenceLog {
+  id: string;
+  endpoint_id: string;
+  version_id: string | null; // 实际命中版本(429/422 未命中为 null)
+  version: string | null; // 命中版本的可读版本号
+  mode: string; // sync / async
+  input_summary: string;
+  output_summary: string;
+  latency_ms: number;
+  status: string; // success / timeout / error / rate_limited
+  created_at: string;
 }
 
 // a4 监控指标

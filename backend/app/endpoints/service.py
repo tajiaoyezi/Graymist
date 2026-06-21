@@ -10,7 +10,7 @@ from app.common import change_log
 from app.common.errors import BindingError, ConflictError, NotFoundError
 from app.common.quota import DIMENSIONS, check_within_quota, endpoint_usage, remaining, sum_usage
 from app.config import settings
-from app.db.tables import EndpointRow, EndpointVersionBindingRow, ModelVersionRow
+from app.db.tables import EndpointRow, EndpointVersionBindingRow, ModelRow, ModelVersionRow
 from app.domain.endpoint_state_machine import assert_endpoint_transition
 from app.domain.enums import EndpointStatus, VersionStatus
 from app.endpoints import deploy
@@ -42,6 +42,25 @@ class EndpointService:
                 )
             )
         ).scalars().all()
+        # 绑定只存 version_id;批量补出可读版本号 + 所属模型名供界面展示(免于甩 UUID)。
+        version_ids = [b.model_version_id for b in rows]
+        labels: dict[str, str] = {}
+        model_name: str | None = None
+        if version_ids:
+            vrows = (
+                await session.execute(
+                    select(
+                        ModelVersionRow.id, ModelVersionRow.version, ModelVersionRow.model_id
+                    ).where(ModelVersionRow.id.in_(version_ids))
+                )
+            ).all()
+            labels = {vid: ver for vid, ver, _ in vrows}
+            model_ids = {mid for _, _, mid in vrows}
+            if model_ids:
+                # 同一端点仅绑同一模型(_validate_bindings 保证),取其一即可。
+                model_name = await session.scalar(
+                    select(ModelRow.name).where(ModelRow.id == next(iter(model_ids)))
+                )
         return {
             "id": ep.id,
             "name": ep.name,
@@ -51,9 +70,15 @@ class EndpointService:
             "resource_quota": ep.resource_quota,
             "timeout_ms": ep.timeout_ms,
             "max_concurrency": ep.max_concurrency,
+            "model_name": model_name,
             "created_at": ep.created_at,
             "bindings": [
-                {"model_version_id": b.model_version_id, "weight": b.weight} for b in rows
+                {
+                    "model_version_id": b.model_version_id,
+                    "weight": b.weight,
+                    "version": labels.get(b.model_version_id, b.model_version_id),
+                }
+                for b in rows
             ],
         }
 

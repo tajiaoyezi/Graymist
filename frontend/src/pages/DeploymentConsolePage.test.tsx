@@ -76,6 +76,30 @@ describe("DeploymentConsolePage 行操作(启停合一 + ⋮ 菜单)", () => {
     expect(screen.getByTestId("edit-e1")).toBeInTheDocument();
   });
 
+  it("模型·版本列:展示模型名 + 可读版本号(非 UUID)", async () => {
+    const enriched = {
+      ...ep("running"),
+      model_name: "文本分类器",
+      bindings: [
+        { model_version_id: "ver-uuid-aaaa", weight: 60, version: "v1.0.0" },
+        { model_version_id: "ver-uuid-bbbb", weight: 40, version: "v1.1.0" },
+      ],
+    };
+    vi.mocked(api.listEndpoints).mockResolvedValue([enriched] as never);
+    renderPage();
+    const row = await screen.findByTestId("status-e1");
+    const cell = row.closest("tr")!;
+    expect(cell).toHaveTextContent("文本分类器");
+    // 版本号与权重分列展示(各占一行,不再 v:weight 黏在一起)
+    expect(cell).toHaveTextContent("v1.0.0");
+    expect(cell).toHaveTextContent("v1.1.0");
+    expect(cell).toHaveTextContent("60%");
+    expect(cell).toHaveTextContent("40%");
+    expect(cell).toHaveTextContent("A"); // A/B 灰度槽位标签
+    expect(cell).toHaveTextContent("B");
+    expect(cell).not.toHaveTextContent("ver-uuid-aaaa"); // 不再甩 UUID
+  });
+
   it("已停止:主按钮=启动", async () => {
     vi.mocked(api.listEndpoints).mockResolvedValue([ep("stopped")] as never);
     renderPage();

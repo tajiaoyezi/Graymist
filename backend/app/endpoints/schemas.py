@@ -47,6 +47,7 @@ class BindingOut(BaseModel):
 
     model_version_id: str
     weight: int
+    version: str  # 可读版本号(如 v1.0.0),供界面展示,免于甩 UUID
 
 
 class EndpointOut(BaseModel):
@@ -60,6 +61,7 @@ class EndpointOut(BaseModel):
     resource_quota: ResourceQuota
     timeout_ms: int
     max_concurrency: int
+    model_name: str | None = None  # 所属模型名(一端点仅一模型),供界面展示
     bindings: list[BindingOut]
     created_at: datetime
 

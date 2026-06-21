@@ -14,6 +14,11 @@ async def test_create_endpoint_returns_creating(endpoint_client):
     assert body["status"] == "creating"
     assert body["url_path"] == "/ep/demo"
     assert body["bindings"][0]["weight"] == 100
+    # 绑定回带可读版本号(供界面展示,免于甩 UUID);helper 版本号为 "v1"
+    assert body["bindings"][0]["version"] == "v1"
+    assert body["bindings"][0]["model_version_id"] == vid
+    # 端点回带所属模型名(一端点仅一模型);helper 模型名为「文本分类器」
+    assert body["model_name"] == "文本分类器"
 
 
 async def test_missing_required_config_rejected(endpoint_client):
